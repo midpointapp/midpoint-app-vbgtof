@@ -95,6 +95,14 @@ export default function RootLayout() {
                 options={{ headerShown: false }} 
               />
               <Stack.Screen
+                name="meet-now"
+                options={{
+                  presentation: "modal",
+                  headerShown: true,
+                  title: "Meet Now",
+                }}
+              />
+              <Stack.Screen
                 name="create-session"
                 options={{
                   presentation: "modal",

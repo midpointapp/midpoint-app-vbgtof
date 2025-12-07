@@ -12,16 +12,103 @@ import {
   useColorScheme,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors, useThemeColors } from '@/styles/commonStyles';
-import { mockSessions, mockParticipants, mockSpots } from '@/data/mockData';
-import { calculateMidpoint } from '@/utils/locationUtils';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+
+const mockSessions = [
+  {
+    id: '1',
+    title: 'Coffee with Sarah',
+    category: 'Coffee',
+    status: 'active',
+    created_at: '2024-01-15T10:00:00Z',
+    invite_code: 'ABC123',
+  },
+  {
+    id: '2',
+    title: 'Lunch with Team',
+    category: 'Meal',
+    status: 'completed',
+    created_at: '2024-01-10T12:00:00Z',
+    invite_code: 'XYZ789',
+  },
+];
+
+const mockParticipants = [
+  {
+    id: '1',
+    session_id: '1',
+    user_name: 'John Doe',
+    user_lat: 37.7749,
+    user_lng: -122.4194,
+  },
+  {
+    id: '2',
+    session_id: '1',
+    user_name: 'Sarah Smith',
+    user_lat: 37.8044,
+    user_lng: -122.2712,
+  },
+];
+
+const mockSpots = [
+  {
+    id: '1',
+    session_id: '1',
+    name: 'Blue Bottle Coffee',
+    category: 'Coffee',
+    lat: 37.7897,
+    lng: -122.3453,
+    address: '123 Main St, San Francisco, CA',
+    distance: 2.5,
+  },
+  {
+    id: '2',
+    session_id: '1',
+    name: 'Starbucks Reserve',
+    category: 'Coffee',
+    lat: 37.7900,
+    lng: -122.3450,
+    address: '456 Market St, San Francisco, CA',
+    distance: 2.7,
+  },
+];
+
+function calculateMidpoint(participants: any[]) {
+  const validParticipants = participants.filter(
+    (p) => p.user_lat && p.user_lng
+  );
+
+  if (validParticipants.length === 0) {
+    return null;
+  }
+
+  const sumLat = validParticipants.reduce((sum, p) => sum + p.user_lat, 0);
+  const sumLng = validParticipants.reduce((sum, p) => sum + p.user_lng, 0);
+
+  return {
+    latitude: sumLat / validParticipants.length,
+    longitude: sumLng / validParticipants.length,
+  };
+}
 
 export default function SessionScreen() {
   const router = useRouter();
-  const themeColors = useThemeColors();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const { id } = useLocalSearchParams();
   const [refreshing, setRefreshing] = useState(false);
+
+  const colors = {
+    background: isDark ? '#121212' : '#F5F5F5',
+    text: isDark ? '#FFFFFF' : '#212121',
+    textSecondary: isDark ? '#B0B0B0' : '#757575',
+    primary: '#3F51B5',
+    secondary: '#E91E63',
+    accent: '#03A9F4',
+    success: '#4CAF50',
+    card: isDark ? '#212121' : '#FFFFFF',
+    border: isDark ? '#424242' : '#E0E0E0',
+  };
 
   const session = mockSessions.find((s) => s.id === id);
   const participants = mockParticipants.filter((p) => p.session_id === id);
@@ -29,8 +116,8 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <Text style={[styles.title, { color: themeColors.text }]}>Session not found</Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Session not found</Text>
       </View>
     );
   }
@@ -66,7 +153,7 @@ export default function SessionScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -75,127 +162,92 @@ export default function SessionScreen() {
         ]}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: themeColors.card }]}>
-            <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="chevron-left"
-              size={24}
-              color={themeColors.text}
-            />
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={[styles.sessionTitle, { color: themeColors.text }]}>{session.title}</Text>
-            <Text style={styles.sessionCategory}>{session.category}</Text>
+            <Text style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
+            <Text style={[styles.sessionCategory, { color: colors.primary }]}>{session.category}</Text>
           </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <Text style={[styles.cardTitle, { color: themeColors.text }]}>Participants</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Participants</Text>
           {participants.map((participant, index) => (
             <React.Fragment key={participant.id}>
               <View style={styles.participantItem}>
-                <View style={styles.participantAvatar}>
-                  <IconSymbol
-                    ios_icon_name="person.fill"
-                    android_material_icon_name="person"
-                    size={24}
-                    color={colors.card}
-                  />
+                <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
+                  <MaterialIcons name="person" size={24} color={colors.card} />
                 </View>
-                <Text style={[styles.participantName, { color: themeColors.text }]}>{participant.user_name}</Text>
+                <Text style={[styles.participantName, { color: colors.text }]}>{participant.user_name}</Text>
                 {participant.user_lat && participant.user_lng && (
-                  <IconSymbol
-                    ios_icon_name="location.fill"
-                    android_material_icon_name="location-on"
-                    size={20}
-                    color={colors.success}
-                  />
+                  <MaterialIcons name="location-on" size={20} color={colors.success} />
                 )}
               </View>
-              {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: themeColors.border }]} />}
+              {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
             </React.Fragment>
           ))}
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.card }]}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.midpointHeader}>
-            <Text style={[styles.cardTitle, { color: themeColors.text }]}>Midpoint Location</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Midpoint Location</Text>
             <TouchableOpacity
               onPress={handleRefreshMidpoint}
               disabled={refreshing}
               style={styles.refreshButton}
             >
-              <IconSymbol
-                ios_icon_name="arrow.clockwise"
-                android_material_icon_name="refresh"
-                size={20}
-                color={colors.primary}
-              />
+              <MaterialIcons name="refresh" size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
           {midpoint ? (
-            <View style={[styles.mapPlaceholder, { backgroundColor: themeColors.background }]}>
-              <IconSymbol
-                ios_icon_name="map.fill"
-                android_material_icon_name="map"
-                size={48}
-                color={colors.primary}
-              />
-              <Text style={[styles.mapText, { color: themeColors.textSecondary }]}>
+            <View style={[styles.mapPlaceholder, { backgroundColor: colors.background }]}>
+              <MaterialIcons name="map" size={48} color={colors.primary} />
+              <Text style={[styles.mapText, { color: colors.textSecondary }]}>
                 Note: react-native-maps is not supported in Natively.
               </Text>
-              <Text style={[styles.coordinatesText, { color: themeColors.text }]}>
+              <Text style={[styles.coordinatesText, { color: colors.text }]}>
                 Midpoint: {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
               </Text>
             </View>
           ) : (
-            <Text style={[styles.noMidpointText, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
               Waiting for participant locations...
             </Text>
           )}
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <Text style={[styles.cardTitle, { color: themeColors.text }]}>Recommended Meeting Spots</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Recommended Meeting Spots</Text>
           {spots.length > 0 ? (
             spots.map((spot, index) => (
               <React.Fragment key={spot.id}>
                 <View style={styles.spotItem}>
-                  <View style={[styles.spotIcon, { backgroundColor: themeColors.background }]}>
-                    <IconSymbol
-                      ios_icon_name="mappin.circle.fill"
-                      android_material_icon_name="place"
-                      size={24}
-                      color={colors.secondary}
-                    />
+                  <View style={[styles.spotIcon, { backgroundColor: colors.background }]}>
+                    <MaterialIcons name="place" size={24} color={colors.secondary} />
                   </View>
                   <View style={styles.spotInfo}>
-                    <Text style={[styles.spotName, { color: themeColors.text }]}>{spot.name}</Text>
-                    <Text style={styles.spotCategory}>{spot.category}</Text>
+                    <Text style={[styles.spotName, { color: colors.text }]}>{spot.name}</Text>
+                    <Text style={[styles.spotCategory, { color: colors.primary }]}>{spot.category}</Text>
                     {spot.address && (
-                      <Text style={[styles.spotAddress, { color: themeColors.textSecondary }]}>{spot.address}</Text>
+                      <Text style={[styles.spotAddress, { color: colors.textSecondary }]}>{spot.address}</Text>
                     )}
                     {spot.distance && (
-                      <Text style={[styles.spotDistance, { color: themeColors.textSecondary }]}>{spot.distance} km away</Text>
+                      <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>{spot.distance} km away</Text>
                     )}
                   </View>
                   <TouchableOpacity
                     style={styles.navigateButton}
                     onPress={() => handleNavigate(spot)}
                   >
-                    <IconSymbol
-                      ios_icon_name="arrow.right.circle.fill"
-                      android_material_icon_name="navigation"
-                      size={32}
-                      color={colors.accent}
-                    />
+                    <MaterialIcons name="navigation" size={32} color={colors.accent} />
                   </TouchableOpacity>
                 </View>
-                {index < spots.length - 1 && <View style={[styles.divider, { backgroundColor: themeColors.border }]} />}
+                {index < spots.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
               </React.Fragment>
             ))
           ) : (
-            <Text style={[styles.noSpotsText, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
               No spots found. Try refreshing the midpoint.
             </Text>
           )}
@@ -203,16 +255,11 @@ export default function SessionScreen() {
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.outlineButton, styles.actionButton]}
+            style={[styles.outlineButton, styles.actionButton, { borderColor: colors.primary }]}
             onPress={handleInviteMore}
           >
-            <IconSymbol
-              ios_icon_name="person.badge.plus"
-              android_material_icon_name="person-add"
-              size={20}
-              color={colors.primary}
-            />
-            <Text style={[styles.outlineButtonText, styles.actionButtonText]}>
+            <MaterialIcons name="person-add" size={20} color={colors.primary} />
+            <Text style={[styles.outlineButtonText, styles.actionButtonText, { color: colors.primary }]}>
               Invite More
             </Text>
           </TouchableOpacity>
@@ -233,6 +280,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 120,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    padding: 20,
   },
   header: {
     flexDirection: 'row',
@@ -257,7 +309,6 @@ const styles = StyleSheet.create({
   },
   sessionCategory: {
     fontSize: 16,
-    color: colors.primary,
   },
   card: {
     borderRadius: 12,
@@ -281,7 +332,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -347,7 +397,6 @@ const styles = StyleSheet.create({
   },
   spotCategory: {
     fontSize: 14,
-    color: colors.primary,
     marginBottom: 2,
   },
   spotAddress: {
@@ -372,10 +421,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.primary,
   },
   outlineButtonText: {
-    color: colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -10,13 +10,38 @@ import {
   useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors, useThemeColors } from '@/styles/commonStyles';
-import { mockSessions, mockCurrentUser } from '@/data/mockData';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+
+const mockSessions = [
+  {
+    id: '1',
+    title: 'Coffee with Sarah',
+    category: 'Coffee',
+    status: 'active',
+    created_at: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: '2',
+    title: 'Lunch with Team',
+    category: 'Meal',
+    status: 'completed',
+    created_at: '2024-01-10T12:00:00Z',
+  },
+];
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const themeColors = useThemeColors();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  const colors = {
+    background: isDark ? '#121212' : '#F5F5F5',
+    text: isDark ? '#FFFFFF' : '#212121',
+    textSecondary: isDark ? '#B0B0B0' : '#757575',
+    primary: '#3F51B5',
+    card: isDark ? '#212121' : '#FFFFFF',
+    border: isDark ? '#424242' : '#E0E0E0',
+  };
 
   const activeSessions = mockSessions.filter((s) => s.status === 'active');
   const completedSessions = mockSessions.filter((s) => s.status === 'completed');
@@ -24,37 +49,27 @@ export default function SessionsScreen() {
   const renderSessionCard = (session: any) => (
     <TouchableOpacity
       key={session.id}
-      style={[styles.card, { backgroundColor: themeColors.card }]}
-      onPress={() => router.push(`/session/${session.id}`)}
+      style={[styles.card, { backgroundColor: colors.card }]}
+      onPress={() => router.push(`/session/${session.id}` as any)}
     >
       <View style={styles.sessionCard}>
-        <View style={[styles.sessionIcon, { backgroundColor: themeColors.background }]}>
-          <IconSymbol
-            ios_icon_name="mappin.circle.fill"
-            android_material_icon_name="place"
-            size={32}
-            color={colors.primary}
-          />
+        <View style={[styles.sessionIcon, { backgroundColor: colors.background }]}>
+          <MaterialIcons name="place" size={32} color={colors.primary} />
         </View>
         <View style={styles.sessionInfo}>
-          <Text style={[styles.sessionTitle, { color: themeColors.text }]}>{session.title}</Text>
-          <Text style={styles.sessionCategory}>{session.category}</Text>
-          <Text style={[styles.sessionDate, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
+          <Text style={[styles.sessionCategory, { color: colors.primary }]}>{session.category}</Text>
+          <Text style={[styles.sessionDate, { color: colors.textSecondary }]}>
             {new Date(session.created_at).toLocaleDateString()}
           </Text>
         </View>
-        <IconSymbol
-          ios_icon_name="chevron.right"
-          android_material_icon_name="chevron-right"
-          size={24}
-          color={themeColors.textSecondary}
-        />
+        <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -62,33 +77,28 @@ export default function SessionsScreen() {
           Platform.OS === 'android' && { paddingTop: 48 },
         ]}
       >
-        <Text style={[styles.title, { color: themeColors.text }]}>Sessions</Text>
-        <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>View all your meeting sessions</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Sessions</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>View all your meeting sessions</Text>
 
         {activeSessions.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Active Sessions</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Sessions</Text>
             {activeSessions.map(renderSessionCard)}
           </View>
         )}
 
         {completedSessions.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Completed Sessions</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Completed Sessions</Text>
             {completedSessions.map(renderSessionCard)}
           </View>
         )}
 
         {activeSessions.length === 0 && completedSessions.length === 0 && (
           <View style={styles.emptyState}>
-            <IconSymbol
-              ios_icon_name="tray.fill"
-              android_material_icon_name="inbox"
-              size={64}
-              color={themeColors.textSecondary}
-            />
-            <Text style={[styles.emptyText, { color: themeColors.text }]}>No sessions yet</Text>
-            <Text style={[styles.emptySubtext, { color: themeColors.textSecondary }]}>
+            <MaterialIcons name="inbox" size={64} color={colors.textSecondary} />
+            <Text style={[styles.emptyText, { color: colors.text }]}>No sessions yet</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
               Create your first MidPoint session from the Home tab
             </Text>
           </View>
@@ -156,7 +166,6 @@ const styles = StyleSheet.create({
   },
   sessionCategory: {
     fontSize: 14,
-    color: colors.primary,
     marginBottom: 2,
   },
   sessionDate: {

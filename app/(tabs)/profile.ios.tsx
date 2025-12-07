@@ -1,75 +1,280 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { IconSymbol } from "@/components/IconSymbol";
-import { GlassView } from "expo-glass-effect";
-import { useTheme } from "@react-navigation/native";
+
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  Alert,
+  useColorScheme,
+} from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+
+const mockCurrentUser = {
+  id: '1',
+  name: 'John Doe',
+  email: 'john@example.com',
+  photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
+  home_area: 'San Francisco, CA',
+  preferences: 'Coffee shops, parks',
+};
 
 export default function ProfileScreen() {
-  const theme = useTheme();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  const colors = {
+    background: isDark ? '#121212' : '#F5F5F5',
+    text: isDark ? '#FFFFFF' : '#212121',
+    textSecondary: isDark ? '#B0B0B0' : '#757575',
+    primary: '#3F51B5',
+    secondary: '#E91E63',
+    card: isDark ? '#212121' : '#FFFFFF',
+    border: isDark ? '#424242' : '#E0E0E0',
+    error: '#F44336',
+  };
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(mockCurrentUser.name);
+  const [homeArea, setHomeArea] = useState(mockCurrentUser.home_area);
+  const [preferences, setPreferences] = useState(mockCurrentUser.preferences || '');
+
+  const handleSave = () => {
+    console.log('Saving profile:', { name, homeArea, preferences });
+    Alert.alert('Success', 'Profile updated successfully!');
+    setIsEditing(false);
+  };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]} edges={['top']}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
       >
-        <GlassView style={styles.profileHeader} glassEffectStyle="regular">
-          <IconSymbol ios_icon_name="person.circle.fill" android_material_icon_name="person" size={24} color={theme.colors.primary} />
-          <Text style={[styles.name, { color: theme.colors.text }]}>John Doe</Text>
-          <Text style={[styles.email, { color: theme.dark ? '#98989D' : '#666' }]}>john.doe@example.com</Text>
-        </GlassView>
+        <View style={styles.header}>
+          <View style={styles.avatarContainer}>
+            {mockCurrentUser.photo ? (
+              <Image source={{ uri: mockCurrentUser.photo }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+                <MaterialIcons name="person" size={48} color={colors.card} />
+              </View>
+            )}
+            <TouchableOpacity style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}>
+              <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.email, { color: colors.textSecondary }]}>{mockCurrentUser.email}</Text>
+        </View>
 
-        <GlassView style={styles.section} glassEffectStyle="regular">
-          <View style={styles.infoRow}>
-            <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={24} color={theme.dark ? '#98989D' : '#666'} />
-            <Text style={[styles.infoText, { color: theme.colors.text }]}>+1 (555) 123-4567</Text>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Profile Information</Text>
+            <TouchableOpacity
+              onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
+            >
+              <Text style={[styles.editButton, { color: colors.primary }]}>{isEditing ? 'Save' : 'Edit'}</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.infoRow}>
-            <IconSymbol ios_icon_name="location.fill" android_material_icon_name="location-on" size={24} color={theme.dark ? '#98989D' : '#666'} />
-            <Text style={[styles.infoText, { color: theme.colors.text }]}>San Francisco, CA</Text>
+
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.label, { color: colors.text }]}>Name</Text>
+            {isEditing ? (
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter your name"
+                placeholderTextColor={colors.textSecondary}
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{name}</Text>
+            )}
           </View>
-        </GlassView>
+
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.label, { color: colors.text }]}>Home Area</Text>
+            {isEditing ? (
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                value={homeArea}
+                onChangeText={setHomeArea}
+                placeholder="e.g., San Francisco, CA"
+                placeholderTextColor={colors.textSecondary}
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea}</Text>
+            )}
+          </View>
+
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.label, { color: colors.text }]}>Preferences</Text>
+            {isEditing ? (
+              <TextInput
+                style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                value={preferences}
+                onChangeText={setPreferences}
+                placeholder="Your preferences..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={3}
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: colors.text }]}>
+                {preferences || 'No preferences set'}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <MaterialIcons name="notifications" size={24} color={colors.text} />
+            <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
+            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <TouchableOpacity style={styles.settingItem}>
+            <MaterialIcons name="lock" size={24} color={colors.text} />
+            <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
+            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <TouchableOpacity style={styles.settingItem}>
+            <MaterialIcons name="help" size={24} color={colors.text} />
+            <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
+            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.error }]}>
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   container: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 20,
+  scrollView: {
+    flex: 1,
   },
-  profileHeader: {
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 120,
+  },
+  header: {
     alignItems: 'center',
-    borderRadius: 12,
-    padding: 32,
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 32,
   },
-  name: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
   },
   email: {
     fontSize: 16,
   },
-  section: {
+  card: {
     borderRadius: 12,
-    padding: 20,
-    gap: 12,
+    padding: 16,
+    marginBottom: 16,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
+    elevation: 3,
   },
-  infoRow: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  editButton: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  fieldContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  input: {
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    borderWidth: 1,
+  },
+  fieldValue: {
+    fontSize: 16,
+    paddingVertical: 8,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 16,
+  },
+  settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingVertical: 12,
   },
-  infoText: {
+  settingText: {
+    flex: 1,
     fontSize: 16,
+  },
+  logoutButton: {
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  logoutText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

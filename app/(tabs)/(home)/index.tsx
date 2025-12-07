@@ -1,32 +1,18 @@
+
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Button } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
+  const router = useRouter();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>MidPoint</Text>
-      <Text style={styles.subtitle}>
-        If you can see this, the home screen is working.
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: 28, fontWeight: '700', marginBottom: 12 }}>MidPoint</Text>
+      <Text style={{ textAlign: 'center', marginBottom: 24 }}>
+        Instantly find the halfway point between you and someone else.
       </Text>
+      <Button title="Find the Midpoint" onPress={() => router.push('/meet-now')} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
-});

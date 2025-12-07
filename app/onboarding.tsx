@@ -12,12 +12,22 @@ import {
   useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors, useThemeColors } from '@/styles/commonStyles';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const themeColors = useThemeColors();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  const colors = {
+    background: isDark ? '#121212' : '#F5F5F5',
+    text: isDark ? '#FFFFFF' : '#212121',
+    textSecondary: isDark ? '#B0B0B0' : '#757575',
+    primary: '#3F51B5',
+    card: isDark ? '#212121' : '#FFFFFF',
+    border: isDark ? '#424242' : '#E0E0E0',
+  };
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -50,7 +60,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -59,79 +69,74 @@ export default function OnboardingScreen() {
         ]}
       >
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <IconSymbol
-              ios_icon_name="mappin.circle.fill"
-              android_material_icon_name="place"
-              size={64}
-              color={colors.primary}
-            />
+          <View style={[styles.logoContainer, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="place" size={64} color={colors.primary} />
           </View>
-          <Text style={[styles.appTitle, { color: themeColors.text }]}>MidPoint</Text>
-          <Text style={[styles.appSubtitle, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.appTitle, { color: colors.text }]}>MidPoint</Text>
+          <Text style={[styles.appSubtitle, { color: colors.textSecondary }]}>
             Meet halfway without sharing your home address
           </Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.card }]}>
-          <Text style={[styles.formTitle, { color: themeColors.text }]}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <Text style={[styles.formTitle, { color: colors.text }]}>
             {isSignUp ? 'Create Account' : 'Welcome Back'}
           </Text>
 
           {isSignUp && (
             <>
               <View style={styles.inputContainer}>
-                <Text style={[styles.label, { color: themeColors.text }]}>Name</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Name</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: themeColors.card, color: themeColors.text, borderColor: themeColors.border }]}
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
                   value={name}
                   onChangeText={setName}
                   placeholder="Enter your name"
-                  placeholderTextColor={themeColors.textSecondary}
+                  placeholderTextColor={colors.textSecondary}
                   autoCapitalize="words"
                 />
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={[styles.label, { color: themeColors.text }]}>Home Area</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Home Area</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: themeColors.card, color: themeColors.text, borderColor: themeColors.border }]}
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
                   value={homeArea}
                   onChangeText={setHomeArea}
                   placeholder="e.g., San Francisco, CA"
-                  placeholderTextColor={themeColors.textSecondary}
+                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
             </>
           )}
 
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Email</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: themeColors.card, color: themeColors.text, borderColor: themeColors.border }]}
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
               value={email}
               onChangeText={setEmail}
               placeholder="Enter your email"
-              placeholderTextColor={themeColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
             />
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: themeColors.text }]}>Password</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: themeColors.card, color: themeColors.text, borderColor: themeColors.border }]}
+              style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
               value={password}
               onChangeText={setPassword}
               placeholder="Enter your password"
-              placeholderTextColor={themeColors.textSecondary}
+              placeholderTextColor={colors.textSecondary}
               secureTextEntry
             />
           </View>
 
           <TouchableOpacity
-            style={[styles.button, styles.submitButton]}
+            style={[styles.button, { backgroundColor: colors.primary }]}
             onPress={isSignUp ? handleSignUp : handleEmailLogin}
           >
             <Text style={styles.buttonText}>
@@ -143,49 +148,39 @@ export default function OnboardingScreen() {
             style={styles.switchButton}
             onPress={() => setIsSignUp(!isSignUp)}
           >
-            <Text style={styles.switchText}>
+            <Text style={[styles.switchText, { color: colors.primary }]}>
               {isSignUp
                 ? 'Already have an account? Log In'
-                : "Don&apos;t have an account? Sign Up"}
+                : "Don't have an account? Sign Up"}
             </Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.dividerContainer}>
-          <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
-          <Text style={[styles.dividerText, { color: themeColors.textSecondary }]}>OR</Text>
-          <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.dividerText, { color: colors.textSecondary }]}>OR</Text>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
         </View>
 
         <View style={styles.socialButtons}>
           <TouchableOpacity
-            style={[styles.socialButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+            style={[styles.socialButton, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => handleSocialLogin('Apple')}
           >
-            <IconSymbol
-              ios_icon_name="apple.logo"
-              android_material_icon_name="apple"
-              size={24}
-              color={themeColors.text}
-            />
-            <Text style={[styles.socialButtonText, { color: themeColors.text }]}>Continue with Apple</Text>
+            <MaterialIcons name="apple" size={24} color={colors.text} />
+            <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Apple</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.socialButton, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+            style={[styles.socialButton, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => handleSocialLogin('Google')}
           >
-            <IconSymbol
-              ios_icon_name="g.circle.fill"
-              android_material_icon_name="google"
-              size={24}
-              color={themeColors.text}
-            />
-            <Text style={[styles.socialButtonText, { color: themeColors.text }]}>Continue with Google</Text>
+            <MaterialIcons name="google" size={24} color={colors.text} />
+            <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Google</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.disclaimer, { color: themeColors.textSecondary }]}>
+        <Text style={[styles.disclaimer, { color: colors.textSecondary }]}>
           By continuing, you agree to our Terms of Service and Privacy Policy
         </Text>
       </ScrollView>
@@ -213,7 +208,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -258,19 +252,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   button: {
-    backgroundColor: colors.primary,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 8,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  submitButton: {
-    marginTop: 8,
   },
   switchButton: {
     marginTop: 16,
@@ -278,7 +269,6 @@ const styles = StyleSheet.create({
   },
   switchText: {
     fontSize: 14,
-    color: colors.primary,
     fontWeight: '600',
   },
   dividerContainer: {
