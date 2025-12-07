@@ -9,49 +9,21 @@ import {
   Platform,
   Alert,
   Linking,
-  useColorScheme,
+  FlatList,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Location from 'expo-location';
+import { useThemeColors } from '@/styles/commonStyles';
 
-const mockSessions = [
-  {
-    id: '1',
-    title: 'Coffee with Sarah',
-    category: 'Coffee',
-    status: 'active',
-    created_at: '2024-01-15T10:00:00Z',
-    invite_code: 'ABC123',
-  },
-  {
-    id: '2',
-    title: 'Lunch with Team',
-    category: 'Meal',
-    status: 'completed',
-    created_at: '2024-01-10T12:00:00Z',
-    invite_code: 'XYZ789',
-  },
-];
-
-const mockParticipants = [
-  {
-    id: '1',
-    session_id: '1',
-    user_name: 'You',
-    user_lat: null,
-    user_lng: null,
-    isCurrentUser: true,
-  },
-  {
-    id: '2',
-    session_id: '1',
-    user_name: 'Sarah Smith',
-    user_lat: 37.8044,
-    user_lng: -122.2712,
-    isCurrentUser: false,
-  },
-];
+interface Participant {
+  id: string;
+  session_id: string;
+  user_name: string;
+  user_lat: number | null;
+  user_lng: number | null;
+  isCurrentUser: boolean;
+}
 
 interface Spot {
   id: string;
@@ -64,7 +36,7 @@ interface Spot {
   distance?: number;
 }
 
-const mockSpots: Spot[] = [
+const SAMPLE_SPOTS: Spot[] = [
   {
     id: '1',
     session_id: '1',
@@ -95,39 +67,19 @@ const mockSpots: Spot[] = [
     address: '789 Mission St, San Francisco, CA 94103',
     distance: 2.3,
   },
-  {
-    id: '4',
-    session_id: '1',
-    name: 'Peet&apos;s Coffee',
-    category: 'Coffee',
-    lat: 37.7892,
-    lng: -122.3458,
-    address: '456 Market St, San Francisco, CA 94102',
-    distance: 2.6,
-  },
-  {
-    id: '5',
-    session_id: '1',
-    name: 'Local Grounds',
-    category: 'Coffee',
-    lat: 37.7888,
-    lng: -122.3460,
-    address: '123 Main St, Oakland, CA 94612',
-    distance: 2.4,
-  },
 ];
 
-function calculateMidpoint(participants: any[]) {
+function calculateMidpoint(participants: Participant[]) {
   const validParticipants = participants.filter(
-    (p) => p.user_lat && p.user_lng
+    (p) => p.user_lat !== null && p.user_lng !== null
   );
 
   if (validParticipants.length === 0) {
     return null;
   }
 
-  const sumLat = validParticipants.reduce((sum, p) => sum + p.user_lat, 0);
-  const sumLng = validParticipants.reduce((sum, p) => sum + p.user_lng, 0);
+  const sumLat = validParticipants.reduce((sum, p) => sum + (p.user_lat || 0), 0);
+  const sumLng = validParticipants.reduce((sum, p) => sum + (p.user_lng || 0), 0);
 
   return {
     latitude: sumLat / validParticipants.length,
@@ -151,57 +103,66 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 export default function SessionScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const { id } = useLocalSearchParams();
+  const colors = useThemeColors();
+  const params = useLocalSearchParams();
+  const { id, midpointLat, midpointLng, contactName, type, safeMode } = params;
+  
   const [refreshing, setRefreshing] = useState(false);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
 
-  const colors = {
-    background: isDark ? '#121212' : '#F5F5F5',
-    text: isDark ? '#FFFFFF' : '#212121',
-    textSecondary: isDark ? '#B0B0B0' : '#757575',
-    primary: '#3F51B5',
-    secondary: '#E91E63',
-    accent: '#03A9F4',
-    success: '#4CAF50',
-    card: isDark ? '#212121' : '#FFFFFF',
-    border: isDark ? '#424242' : '#E0E0E0',
-    error: '#F44336',
-  };
+  const isSafeMode = safeMode === 'true';
+  const sessionTitle = contactName ? `Meeting with ${contactName}` : 'MidPoint Session';
+  const sessionCategory = type || 'General';
 
-  const session = mockSessions.find((s) => s.id === id);
-  let participants = mockParticipants.filter((p) => p.session_id === id);
-  
-  if (myLocation) {
-    participants = participants.map((p) => {
-      if (p.isCurrentUser) {
-        return {
-          ...p,
-          user_lat: myLocation.latitude,
-          user_lng: myLocation.longitude,
-        };
-      }
-      return p;
-    });
-  }
+  const initialParticipants: Participant[] = [
+    {
+      id: '1',
+      session_id: id as string,
+      user_name: 'You',
+      user_lat: null,
+      user_lng: null,
+      isCurrentUser: true,
+    },
+    {
+      id: '2',
+      session_id: id as string,
+      user_name: contactName as string || 'Contact',
+      user_lat: midpointLat ? parseFloat(midpointLat as string) * 2 - (myLocation?.latitude || 37.7749) : 37.8044,
+      user_lng: midpointLng ? parseFloat(midpointLng as string) * 2 - (myLocation?.longitude || -122.4194) : -122.2712,
+      isCurrentUser: false,
+    },
+  ];
 
-  const midpoint = calculateMidpoint(participants);
-  
-  let spotsWithDistance = mockSpots.filter((s) => s.session_id === id);
-  if (midpoint) {
-    spotsWithDistance = spotsWithDistance.map((spot) => ({
-      ...spot,
-      distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
-    })).sort((a, b) => a.distance - b.distance);
-  }
+  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
 
   useEffect(() => {
     getCurrentLocation();
   }, []);
+
+  useEffect(() => {
+    if (myLocation) {
+      setParticipants(prev => prev.map(p => 
+        p.isCurrentUser 
+          ? { ...p, user_lat: myLocation.latitude, user_lng: myLocation.longitude }
+          : p
+      ));
+    }
+  }, [myLocation]);
+
+  const midpoint = midpointLat && midpointLng 
+    ? { latitude: parseFloat(midpointLat as string), longitude: parseFloat(midpointLng as string) }
+    : calculateMidpoint(participants);
+  
+  let spotsWithDistance = SAMPLE_SPOTS.filter((s) => s.session_id === id);
+  if (midpoint) {
+    spotsWithDistance = spotsWithDistance.map((spot) => ({
+      ...spot,
+      distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
+    })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  }
 
   useEffect(() => {
     if (midpoint) {
@@ -269,14 +230,6 @@ export default function SessionScreen() {
     }
   };
 
-  if (!session) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Session not found</Text>
-      </View>
-    );
-  }
-
   const handleRefreshMidpoint = async () => {
     setRefreshing(true);
     console.log('Refreshing midpoint...');
@@ -299,7 +252,7 @@ export default function SessionScreen() {
   };
 
   const handleInviteMore = () => {
-    const inviteLink = `https://midpoint.app/invite/${session.invite_code}`;
+    const inviteLink = `https://midpoint.app/invite/SESSION123`;
     Alert.alert(
       'Invite More People',
       `Share this link:\n\n${inviteLink}`,
@@ -310,7 +263,71 @@ export default function SessionScreen() {
     );
   };
 
-  const allUsersHaveLocation = participants.every((p) => p.user_lat && p.user_lng);
+  const allUsersHaveLocation = participants.every((p) => p.user_lat !== null && p.user_lng !== null);
+
+  const renderParticipant = ({ item, index }: { item: Participant; index: number }) => (
+    <React.Fragment key={item.id}>
+      <View style={styles.participantItem}>
+        <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
+          <MaterialIcons name="person" size={24} color={colors.card} />
+        </View>
+        <View style={styles.participantInfo}>
+          <Text style={[styles.participantName, { color: colors.text }]}>
+            {item.user_name}
+            {item.isCurrentUser && ' (You)'}
+          </Text>
+          {item.isCurrentUser && locationLoading && (
+            <Text style={[styles.participantStatus, { color: colors.textSecondary }]}>
+              Getting location...
+            </Text>
+          )}
+          {item.isCurrentUser && locationError && (
+            <Text style={[styles.participantStatus, { color: colors.error }]}>
+              {locationError}
+            </Text>
+          )}
+        </View>
+        {item.user_lat !== null && item.user_lng !== null ? (
+          <MaterialIcons name="location-on" size={20} color={colors.success} />
+        ) : (
+          <MaterialIcons name="location-off" size={20} color={colors.error} />
+        )}
+      </View>
+      {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+    </React.Fragment>
+  );
+
+  const renderSpot = ({ item, index }: { item: Spot; index: number }) => (
+    <React.Fragment key={item.id}>
+      <View style={styles.spotItem}>
+        <View style={[styles.spotIcon, { backgroundColor: colors.background }]}>
+          <MaterialIcons name="place" size={24} color={colors.secondary} />
+        </View>
+        <View style={styles.spotInfo}>
+          <Text style={[styles.spotName, { color: colors.text }]}>{item.name}</Text>
+          <Text style={[styles.spotCategory, { color: colors.primary }]}>{item.category}</Text>
+          {item.address && (
+            <Text style={[styles.spotAddress, { color: colors.text }]} numberOfLines={1}>
+              {item.address}
+            </Text>
+          )}
+          <Text style={[styles.spotCoordinates, { color: colors.textSecondary }]}>
+            {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
+          </Text>
+          <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>
+            {item.distance?.toFixed(2)} km from midpoint
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.navigateButton}
+          onPress={() => handleNavigate(item)}
+        >
+          <MaterialIcons name="navigation" size={32} color={colors.accent} />
+        </TouchableOpacity>
+      </View>
+      {index < spotsWithDistance.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+    </React.Fragment>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -326,44 +343,27 @@ export default function SessionScreen() {
             <MaterialIcons name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
-            <Text style={[styles.sessionCategory, { color: colors.primary }]}>{session.category}</Text>
+            <Text style={[styles.sessionTitle, { color: colors.text }]}>{sessionTitle}</Text>
+            <Text style={[styles.sessionCategory, { color: colors.primary }]}>{sessionCategory}</Text>
           </View>
         </View>
 
+        {isSafeMode && (
+          <View style={[styles.safeModeIndicator, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+            <Text style={[styles.safeModeText, { color: colors.success }]}>
+              🔒 Safe Meet Mode Active
+            </Text>
+          </View>
+        )}
+
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Participants</Text>
-          {participants.map((participant, index) => (
-            <React.Fragment key={participant.id}>
-              <View style={styles.participantItem}>
-                <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
-                  <MaterialIcons name="person" size={24} color={colors.card} />
-                </View>
-                <View style={styles.participantInfo}>
-                  <Text style={[styles.participantName, { color: colors.text }]}>
-                    {participant.user_name}
-                    {participant.isCurrentUser && ' (You)'}
-                  </Text>
-                  {participant.isCurrentUser && locationLoading && (
-                    <Text style={[styles.participantStatus, { color: colors.textSecondary }]}>
-                      Getting location...
-                    </Text>
-                  )}
-                  {participant.isCurrentUser && locationError && (
-                    <Text style={[styles.participantStatus, { color: colors.error }]}>
-                      {locationError}
-                    </Text>
-                  )}
-                </View>
-                {participant.user_lat && participant.user_lng ? (
-                  <MaterialIcons name="location-on" size={20} color={colors.success} />
-                ) : (
-                  <MaterialIcons name="location-off" size={20} color={colors.error} />
-                )}
-              </View>
-              {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-            </React.Fragment>
-          ))}
+          <FlatList
+            data={participants}
+            renderItem={renderParticipant}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+          />
           
           {!allUsersHaveLocation && (
             <View style={[styles.warningBox, { backgroundColor: colors.error + '20', borderColor: colors.error }]}>
@@ -441,37 +441,12 @@ export default function SessionScreen() {
             Public locations near the midpoint
           </Text>
           {midpoint && spotsWithDistance.length > 0 ? (
-            spotsWithDistance.map((spot, index) => (
-              <React.Fragment key={spot.id}>
-                <View style={styles.spotItem}>
-                  <View style={[styles.spotIcon, { backgroundColor: colors.background }]}>
-                    <MaterialIcons name="place" size={24} color={colors.secondary} />
-                  </View>
-                  <View style={styles.spotInfo}>
-                    <Text style={[styles.spotName, { color: colors.text }]}>{spot.name}</Text>
-                    <Text style={[styles.spotCategory, { color: colors.primary }]}>{spot.category}</Text>
-                    {spot.address && (
-                      <Text style={[styles.spotAddress, { color: colors.text }]} numberOfLines={1}>
-                        {spot.address}
-                      </Text>
-                    )}
-                    <Text style={[styles.spotCoordinates, { color: colors.textSecondary }]}>
-                      {spot.lat.toFixed(4)}, {spot.lng.toFixed(4)}
-                    </Text>
-                    <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>
-                      {spot.distance?.toFixed(2)} km from midpoint
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.navigateButton}
-                    onPress={() => handleNavigate(spot)}
-                  >
-                    <MaterialIcons name="navigation" size={32} color={colors.accent} />
-                  </TouchableOpacity>
-                </View>
-                {index < spotsWithDistance.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-              </React.Fragment>
-            ))
+            <FlatList
+              data={spotsWithDistance}
+              renderItem={renderSpot}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+            />
           ) : !midpoint ? (
             <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
               Calculate midpoint first to see nearby places.
@@ -511,11 +486,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 120,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    padding: 20,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,6 +509,17 @@ const styles = StyleSheet.create({
   },
   sessionCategory: {
     fontSize: 16,
+  },
+  safeModeIndicator: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  safeModeText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   card: {
     borderRadius: 12,

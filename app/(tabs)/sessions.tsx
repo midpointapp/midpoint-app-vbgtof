@@ -4,63 +4,45 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Platform,
-  useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useThemeColors } from '@/styles/commonStyles';
 
-const mockSessions = [
-  {
-    id: '1',
-    title: 'Coffee with Sarah',
-    category: 'Coffee',
-    status: 'active',
-    created_at: '2024-01-15T10:00:00Z',
-  },
-  {
-    id: '2',
-    title: 'Lunch with Team',
-    category: 'Meal',
-    status: 'completed',
-    created_at: '2024-01-10T12:00:00Z',
-  },
-];
+interface Session {
+  id: string;
+  title: string;
+  category: string;
+  status: 'active' | 'completed';
+  created_at: string;
+}
+
+const SAMPLE_SESSIONS: Session[] = [];
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const colors = useThemeColors();
 
-  const colors = {
-    background: isDark ? '#121212' : '#F5F5F5',
-    text: isDark ? '#FFFFFF' : '#212121',
-    textSecondary: isDark ? '#B0B0B0' : '#757575',
-    primary: '#3F51B5',
-    card: isDark ? '#212121' : '#FFFFFF',
-    border: isDark ? '#424242' : '#E0E0E0',
-  };
+  const activeSessions = SAMPLE_SESSIONS.filter((s) => s.status === 'active');
+  const completedSessions = SAMPLE_SESSIONS.filter((s) => s.status === 'completed');
 
-  const activeSessions = mockSessions.filter((s) => s.status === 'active');
-  const completedSessions = mockSessions.filter((s) => s.status === 'completed');
-
-  const renderSessionCard = (session: any) => (
+  const renderSessionCard = ({ item }: { item: Session }) => (
     <TouchableOpacity
-      key={session.id}
       style={[styles.card, { backgroundColor: colors.card }]}
-      onPress={() => router.push(`/session/${session.id}` as any)}
+      onPress={() => router.push(`/session/${item.id}` as any)}
     >
       <View style={styles.sessionCard}>
         <View style={[styles.sessionIcon, { backgroundColor: colors.background }]}>
           <MaterialIcons name="place" size={32} color={colors.primary} />
         </View>
         <View style={styles.sessionInfo}>
-          <Text style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
-          <Text style={[styles.sessionCategory, { color: colors.primary }]}>{session.category}</Text>
+          <Text style={[styles.sessionTitle, { color: colors.text }]}>{item.title}</Text>
+          <Text style={[styles.sessionCategory, { color: colors.primary }]}>{item.category}</Text>
           <Text style={[styles.sessionDate, { color: colors.textSecondary }]}>
-            {new Date(session.created_at).toLocaleDateString()}
+            {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
         <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -68,51 +50,67 @@ export default function SessionsScreen() {
     </TouchableOpacity>
   );
 
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <MaterialIcons name="inbox" size={64} color={colors.textSecondary} />
+      <Text style={[styles.emptyText, { color: colors.text }]}>No sessions yet</Text>
+      <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+        Create your first MidPoint session from the Home tab
+      </Text>
+    </View>
+  );
+
+  const renderHeader = () => (
+    <View>
+      <Text style={[styles.title, { color: colors.text }]}>Sessions</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+        View all your meeting sessions
+      </Text>
+
+      {activeSessions.length > 0 && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Sessions</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderFooter = () => {
+    if (completedSessions.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Completed Sessions</Text>
+        <FlatList
+          data={completedSessions}
+          renderItem={renderSessionCard}
+          keyExtractor={(item) => `completed-${item.id}`}
+          scrollEnabled={false}
+        />
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        style={styles.scrollView}
+      <FlatList
+        data={activeSessions}
+        renderItem={renderSessionCard}
+        keyExtractor={(item) => `active-${item.id}`}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={activeSessions.length === 0 && completedSessions.length === 0 ? renderEmptyState : null}
         contentContainerStyle={[
           styles.scrollContent,
           Platform.OS === 'android' && { paddingTop: 48 },
         ]}
-      >
-        <Text style={[styles.title, { color: colors.text }]}>Sessions</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>View all your meeting sessions</Text>
-
-        {activeSessions.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Sessions</Text>
-            {activeSessions.map(renderSessionCard)}
-          </View>
-        )}
-
-        {completedSessions.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Completed Sessions</Text>
-            {completedSessions.map(renderSessionCard)}
-          </View>
-        )}
-
-        {activeSessions.length === 0 && completedSessions.length === 0 && (
-          <View style={styles.emptyState}>
-            <MaterialIcons name="inbox" size={64} color={colors.textSecondary} />
-            <Text style={[styles.emptyText, { color: colors.text }]}>No sessions yet</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-              Create your first MidPoint session from the Home tab
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  scrollView: {
     flex: 1,
   },
   scrollContent: {

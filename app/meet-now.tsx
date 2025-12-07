@@ -1,14 +1,34 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform, Linking } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  Alert, 
+  Platform, 
+  Linking,
+  Modal,
+  FlatList,
+  KeyboardAvoidingView
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-// Download link constant - easily changeable
 const DOWNLOAD_LINK = 'https://midpointapp.yourlink';
+
+const MEETUP_TYPES = [
+  { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
+  { id: 'restaurant', label: 'Restaurants/Coffee shops', icon: 'restaurant' as const },
+  { id: 'police', label: 'Police stations', icon: 'local-police' as const },
+  { id: 'rest', label: 'Rest areas', icon: 'hotel' as const },
+  { id: 'public', label: 'Other safe public places', icon: 'place' as const },
+];
 
 interface SavedContact {
   id: string;
@@ -25,6 +45,18 @@ interface LocationWithAddress {
   address?: string;
 }
 
+interface MidpointResult {
+  latitude: number;
+  longitude: number;
+  contactName: string;
+  suggestedLocation: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+  };
+}
+
 export default function MeetNowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -32,17 +64,13 @@ export default function MeetNowScreen() {
   const isSafeMode = params.safeMode === 'true';
 
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
-  const [type, setType] = useState('');
+  const [selectedMeetupType, setSelectedMeetupType] = useState<string | null>(null);
+  const [showMeetupTypeDropdown, setShowMeetupTypeDropdown] = useState(false);
   const [myLocation, setMyLocation] = useState<LocationWithAddress | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
-  
-  const [savedContacts, setSavedContacts] = useState<SavedContact[]>([
-    { id: '1', name: 'Mom', initials: 'M', phoneNumber: '+1234567890', lat: 37.8044, lng: -122.2712 },
-    { id: '2', name: 'Sarah', initials: 'S', phoneNumber: '+1234567891', lat: 37.7749, lng: -122.4194 },
-    { id: '3', name: 'Chris', initials: 'C', phoneNumber: '+1234567892', lat: 37.8715, lng: -122.2730 },
-    { id: '4', name: 'Alex', initials: 'A', phoneNumber: '+1234567893', lat: 37.7897, lng: -122.3453 },
-  ]);
+  const [midpointResult, setMidpointResult] = useState<MidpointResult | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
 
   useEffect(() => {
     getCurrentLocation();
@@ -98,7 +126,7 @@ export default function MeetNowScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const address = await reverseGeocode(location.coords.latitude, location.coords.longitude);
+      const address = isSafeMode ? null : await reverseGeocode(location.coords.latitude, location.coords.longitude);
 
       setMyLocation({
         latitude: location.coords.latitude,
@@ -156,6 +184,8 @@ export default function MeetNowScreen() {
             name: fullName,
             initials: initials,
             phoneNumber: phoneNumber,
+            lat: 37.8044 + (Math.random() - 0.5) * 0.1,
+            lng: -122.2712 + (Math.random() - 0.5) * 0.1,
           };
           
           setSelectedContact(newContact);
@@ -228,7 +258,30 @@ export default function MeetNowScreen() {
     }
   };
 
-  const handleFind = () => {
+  const generateMockLocation = (midLat: number, midLng: number, type: string) => {
+    const typeLabels: Record<string, string[]> = {
+      gas: ['Shell Gas Station', 'Chevron', '76 Gas Station', 'Arco'],
+      restaurant: ['Starbucks', 'Peet\'s Coffee', 'Blue Bottle Coffee', 'Local Cafe'],
+      police: ['Police Station', 'Sheriff\'s Office', 'Public Safety Office'],
+      rest: ['Rest Area', 'Travel Center', 'Roadside Rest Stop'],
+      public: ['Public Library', 'Community Center', 'City Hall', 'Park'],
+    };
+
+    const names = typeLabels[type] || typeLabels.public;
+    const randomName = names[Math.floor(Math.random() * names.length)];
+    
+    const offsetLat = (Math.random() - 0.5) * 0.01;
+    const offsetLng = (Math.random() - 0.5) * 0.01;
+    
+    return {
+      name: randomName,
+      address: `${Math.floor(Math.random() * 9000 + 1000)} Main St, City, State`,
+      lat: midLat + offsetLat,
+      lng: midLng + offsetLng,
+    };
+  };
+
+  const handleFindMidpoint = () => {
     if (!myLocation) {
       Alert.alert(
         'Location Required',
@@ -256,212 +309,339 @@ export default function MeetNowScreen() {
       return;
     }
 
-    const userA = {
-      name: 'You',
-      lat: myLocation.latitude,
-      lng: myLocation.longitude,
-    };
-
-    const userB = {
-      name: selectedContact.name,
-      lat: selectedContact.lat,
-      lng: selectedContact.lng,
-    };
-
-    const midpointLat = (userA.lat + userB.lat) / 2;
-    const midpointLng = (userA.lng + userB.lng) / 2;
-
-    console.log('Find midpoint with:', { 
-      userA,
-      userB,
-      midpoint: { lat: midpointLat, lng: midpointLng },
-      type,
-      safeMode: isSafeMode 
-    });
-    
-    if (isSafeMode) {
-      console.log('Safe Meet mode: Only public locations will be suggested');
+    if (!selectedMeetupType) {
+      Alert.alert('No Meetup Type Selected', 'Please select a meetup type.');
+      return;
     }
-    
-    router.push(`/session/1?midpointLat=${midpointLat}&midpointLng=${midpointLng}&contactName=${selectedContact.name}&type=${type}&safeMode=${isSafeMode}` as any);
+
+    let userLat = myLocation.latitude;
+    let userLng = myLocation.longitude;
+
+    if (isSafeMode) {
+      userLat = Math.round(userLat * 100) / 100;
+      userLng = Math.round(userLng * 100) / 100;
+      console.log('Safe Meet mode: Using masked location', { userLat, userLng });
+    }
+
+    const midpointLat = (userLat + selectedContact.lat) / 2;
+    const midpointLng = (userLng + selectedContact.lng) / 2;
+
+    const suggestedLocation = generateMockLocation(midpointLat, midpointLng, selectedMeetupType);
+
+    const result: MidpointResult = {
+      latitude: midpointLat,
+      longitude: midpointLng,
+      contactName: selectedContact.name,
+      suggestedLocation,
+    };
+
+    console.log('Midpoint calculated:', result);
+    setMidpointResult(result);
+    setShowResultModal(true);
   };
 
-  return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
+  const handleOpenInMaps = () => {
+    if (!midpointResult) return;
+
+    const { lat, lng } = midpointResult.suggestedLocation;
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    
+    Linking.openURL(url).catch((err) => {
+      console.error('Error opening maps:', err);
+      Alert.alert('Error', 'Failed to open maps. Please try again.');
+    });
+  };
+
+  const renderContactItem = ({ item }: { item: SavedContact }) => (
+    <TouchableOpacity
+      style={styles.contactItem}
+      onPress={() => handleSelectContact(item)}
+      activeOpacity={0.7}
     >
-      {isSafeMode && (
-        <View style={[styles.safeModeIndicator, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
-          <Text style={[styles.safeModeText, { color: colors.success }]}>
-            🔒 Safe Meet ON
-          </Text>
-          <Text style={[styles.safeModeSubtext, { color: colors.textSecondary }]}>
-            Your exact location will be hidden
-          </Text>
-        </View>
+      <View style={[styles.contactCircle, { backgroundColor: colors.primary }]}>
+        <Text style={styles.contactInitials}>{item.initials}</Text>
+      </View>
+      <Text style={[styles.contactName, { color: colors.text }]} numberOfLines={1}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
+    <TouchableOpacity
+      style={[
+        styles.dropdownItem,
+        { backgroundColor: colors.card, borderColor: colors.border }
+      ]}
+      onPress={() => {
+        setSelectedMeetupType(item.id);
+        setShowMeetupTypeDropdown(false);
+      }}
+      activeOpacity={0.7}
+    >
+      <MaterialIcons name={item.icon} size={24} color={colors.primary} />
+      <Text style={[styles.dropdownItemText, { color: colors.text }]}>{item.label}</Text>
+      {selectedMeetupType === item.id && (
+        <MaterialIcons name="check" size={24} color={colors.success} />
       )}
+    </TouchableOpacity>
+  );
 
-      <Text style={[styles.title, { color: colors.text }]}>Meet in the Middle</Text>
+  const selectedMeetupTypeLabel = MEETUP_TYPES.find(t => t.id === selectedMeetupType)?.label;
 
-      <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.locationHeader}>
-          <Text style={[styles.locationLabel, { color: colors.text }]}>Your Location</Text>
-          {locationLoading && (
-            <Text style={[styles.locationStatus, { color: colors.textSecondary }]}>Getting location...</Text>
+  return (
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView 
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {isSafeMode && (
+          <View style={[styles.safeModeIndicator, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+            <Text style={[styles.safeModeText, { color: colors.success }]}>
+              🔒 Safe Meet ON
+            </Text>
+            <Text style={[styles.safeModeSubtext, { color: colors.textSecondary }]}>
+              Your exact location will be hidden
+            </Text>
+          </View>
+        )}
+
+        <Text style={[styles.title, { color: colors.text }]}>Meet in the Middle</Text>
+
+        <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.locationHeader}>
+            <Text style={[styles.locationLabel, { color: colors.text }]}>Your Location</Text>
+            {locationLoading && (
+              <Text style={[styles.locationStatus, { color: colors.textSecondary }]}>Getting location...</Text>
+            )}
+            {locationError && (
+              <TouchableOpacity onPress={getCurrentLocation}>
+                <Text style={[styles.locationStatus, { color: colors.error }]}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {myLocation ? (
+            <View style={styles.locationInfo}>
+              <Text style={[styles.locationText, { color: colors.success }]}>
+                ✓ Location obtained
+              </Text>
+              {myLocation.address && !isSafeMode && (
+                <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>
+                  {myLocation.address}
+                </Text>
+              )}
+              <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
+                {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
+              </Text>
+            </View>
+          ) : locationError ? (
+            <View>
+              <Text style={[styles.locationText, { color: colors.error }]}>
+                {locationError}
+              </Text>
+              <TouchableOpacity 
+                style={[styles.settingsButton, { backgroundColor: colors.primary }]}
+                onPress={() => Linking.openSettings()}
+              >
+                <Text style={styles.settingsButtonText}>Open Settings</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+              Waiting for location...
+            </Text>
           )}
-          {locationError && (
-            <TouchableOpacity onPress={getCurrentLocation}>
-              <Text style={[styles.locationStatus, { color: colors.error }]}>Retry</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>Who are you meeting?</Text>
+          
+          {selectedContact ? (
+            <View style={[styles.selectedContactCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+              <View style={[styles.contactAvatar, { backgroundColor: colors.primary }]}>
+                <Text style={styles.contactInitials}>{selectedContact.initials}</Text>
+              </View>
+              <View style={styles.selectedContactInfo}>
+                <Text style={[styles.selectedContactName, { color: colors.text }]}>
+                  {selectedContact.name}
+                </Text>
+                {selectedContact.phoneNumber && (
+                  <Text style={[styles.contactPhoneText, { color: colors.textSecondary }]}>
+                    {selectedContact.phoneNumber}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity 
+                onPress={() => setSelectedContact(null)}
+                style={styles.removeButton}
+              >
+                <Text style={[styles.removeButtonText, { color: colors.error }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.contactSelectorContainer}>
+              <TouchableOpacity
+                style={[styles.pickContactButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+                onPress={handlePickFromContacts}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="contacts" size={24} color={colors.primary} />
+                <Text style={[styles.pickContactButtonText, { color: colors.primary }]}>
+                  Pick from Device Contacts
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {selectedContact && selectedContact.phoneNumber && (
+            <TouchableOpacity
+              style={[styles.inviteButton, { backgroundColor: colors.secondary }]}
+              onPress={handleSendInviteSMS}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.inviteButtonText}>
+                📲 Send Download Link via SMS
+              </Text>
             </TouchableOpacity>
           )}
         </View>
-        {myLocation ? (
-          <View style={styles.locationInfo}>
-            <Text style={[styles.locationText, { color: colors.success }]}>
-              ✓ Location obtained
-            </Text>
-            {myLocation.address && !isSafeMode && (
-              <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>
-                {myLocation.address}
-              </Text>
-            )}
-            <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
-              {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
-            </Text>
-          </View>
-        ) : locationError ? (
-          <View>
-            <Text style={[styles.locationText, { color: colors.error }]}>
-              {locationError}
-            </Text>
-            <TouchableOpacity 
-              style={[styles.settingsButton, { backgroundColor: colors.primary }]}
-              onPress={() => Linking.openSettings()}
-            >
-              <Text style={styles.settingsButtonText}>Open Settings</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-            Waiting for location...
-          </Text>
-        )}
-      </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Who are you meeting?</Text>
-        
-        {selectedContact ? (
-          <View style={[styles.selectedContactCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
-            <View style={[styles.contactAvatar, { backgroundColor: colors.primary }]}>
-              <Text style={styles.contactInitials}>{selectedContact.initials}</Text>
-            </View>
-            <View style={styles.selectedContactInfo}>
-              <Text style={[styles.selectedContactName, { color: colors.text }]}>
-                {selectedContact.name}
-              </Text>
-              {selectedContact.phoneNumber && (
-                <Text style={[styles.contactPhoneText, { color: colors.textSecondary }]}>
-                  {selectedContact.phoneNumber}
-                </Text>
-              )}
-              {selectedContact.lat && selectedContact.lng && (
-                <Text style={[styles.contactLocationText, { color: colors.textSecondary }]}>
-                  Location: {selectedContact.lat.toFixed(4)}, {selectedContact.lng.toFixed(4)}
-                </Text>
-              )}
-            </View>
-            <TouchableOpacity 
-              onPress={() => setSelectedContact(null)}
-              style={styles.removeButton}
-            >
-              <Text style={[styles.removeButtonText, { color: colors.error }]}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.contactSelectorContainer}>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Select from saved contacts:
-            </Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.contactList}
-              contentContainerStyle={styles.contactListContent}
-            >
-              {savedContacts.map((contact) => (
-                <TouchableOpacity
-                  key={contact.id}
-                  style={styles.contactItem}
-                  onPress={() => handleSelectContact(contact)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.contactCircle, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.contactInitials}>{contact.initials}</Text>
-                  </View>
-                  <Text style={[styles.contactName, { color: colors.text }]} numberOfLines={1}>
-                    {contact.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={[styles.pickContactButton, { borderColor: colors.border, backgroundColor: colors.card }]}
-              onPress={handlePickFromContacts}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.pickContactButtonText, { color: colors.primary }]}>
-                📱 Pick from Device Contacts
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {selectedContact && selectedContact.phoneNumber && (
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: colors.text }]}>Meetup Type</Text>
           <TouchableOpacity
-            style={[styles.inviteButton, { backgroundColor: colors.secondary }]}
-            onPress={handleSendInviteSMS}
-            activeOpacity={0.8}
+            style={[styles.dropdownButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => setShowMeetupTypeDropdown(true)}
+            activeOpacity={0.7}
           >
-            <Text style={styles.inviteButtonText}>
-              📲 Send Download Link via SMS
+            <MaterialIcons 
+              name={selectedMeetupType ? MEETUP_TYPES.find(t => t.id === selectedMeetupType)?.icon || 'place' : 'place'} 
+              size={24} 
+              color={selectedMeetupType ? colors.primary : colors.textSecondary} 
+            />
+            <Text style={[styles.dropdownButtonText, { color: selectedMeetupType ? colors.text : colors.textSecondary }]}>
+              {selectedMeetupTypeLabel || 'Select meetup type...'}
             </Text>
+            <MaterialIcons name="arrow-drop-down" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.label, { color: colors.text }]}>Type of meetup</Text>
-        <TextInput
-          style={[styles.input, { 
-            backgroundColor: colors.card, 
-            color: colors.text,
-            borderColor: colors.border 
-          }]}
-          placeholder="Ex: Coffee, Meal, Marketplace Sale"
-          placeholderTextColor={colors.textSecondary}
-          value={type}
-          onChangeText={setType}
-        />
-      </View>
+        <TouchableOpacity
+          style={[
+            styles.findButton, 
+            { backgroundColor: colors.primary },
+            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType) && styles.findButtonDisabled
+          ]}
+          onPress={handleFindMidpoint}
+          activeOpacity={0.8}
+          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType}
+        >
+          <Text style={styles.findButtonText}>
+            {isSafeMode ? 'SafeMeet — Hide My Address' : 'Find the MidPoint'}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
 
-      <TouchableOpacity
-        style={[
-          styles.findButton, 
-          { backgroundColor: colors.primary },
-          (!myLocation || locationLoading) && styles.findButtonDisabled
-        ]}
-        onPress={handleFind}
-        activeOpacity={0.8}
-        disabled={!myLocation || locationLoading}
+      <Modal
+        visible={showMeetupTypeDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMeetupTypeDropdown(false)}
       >
-        <Text style={styles.findButtonText}>
-          {locationLoading ? 'Getting Location...' : 'Find Midpoint'}
-        </Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMeetupTypeDropdown(false)}
+        >
+          <View style={[styles.dropdownModal, { backgroundColor: colors.background }]}>
+            <View style={[styles.dropdownHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.dropdownTitle, { color: colors.text }]}>Select Meetup Type</Text>
+              <TouchableOpacity onPress={() => setShowMeetupTypeDropdown(false)}>
+                <MaterialIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={MEETUP_TYPES}
+              renderItem={renderMeetupTypeItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.dropdownList}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={showResultModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowResultModal(false)}
+      >
+        <View style={styles.resultModalOverlay}>
+          <TouchableOpacity 
+            style={styles.resultModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowResultModal(false)}
+          />
+          <View style={[styles.resultBottomSheet, { backgroundColor: colors.card }]}>
+            <View style={[styles.resultHandle, { backgroundColor: colors.border }]} />
+            
+            <View style={styles.resultContent}>
+              <View style={[styles.resultIconContainer, { backgroundColor: colors.success + '20' }]}>
+                <MaterialIcons name="check-circle" size={48} color={colors.success} />
+              </View>
+              
+              <Text style={[styles.resultTitle, { color: colors.text }]}>Midpoint Found!</Text>
+              
+              {midpointResult && (
+                <>
+                  <View style={styles.resultInfo}>
+                    <View style={styles.resultRow}>
+                      <MaterialIcons name="person" size={20} color={colors.textSecondary} />
+                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Meeting with:</Text>
+                      <Text style={[styles.resultValue, { color: colors.text }]}>{midpointResult.contactName}</Text>
+                    </View>
+                    
+                    <View style={styles.resultRow}>
+                      <MaterialIcons name="place" size={20} color={colors.textSecondary} />
+                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Location:</Text>
+                      <Text style={[styles.resultValue, { color: colors.text }]}>{midpointResult.suggestedLocation.name}</Text>
+                    </View>
+                    
+                    <View style={styles.resultRow}>
+                      <MaterialIcons name="location-on" size={20} color={colors.textSecondary} />
+                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Address:</Text>
+                      <Text style={[styles.resultValue, { color: colors.text }]} numberOfLines={2}>
+                        {midpointResult.suggestedLocation.address}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.mapsButton, { backgroundColor: colors.primary }]}
+                    onPress={handleOpenInMaps}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="map" size={24} color="#FFFFFF" />
+                    <Text style={styles.mapsButtonText}>Open in Maps</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.closeButton, { borderColor: colors.border }]}
+                    onPress={() => setShowResultModal(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -471,7 +651,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   safeModeIndicator: {
     padding: 16,
@@ -549,10 +729,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 12,
-  },
   selectedContactCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -578,11 +754,6 @@ const styles = StyleSheet.create({
   },
   contactPhoneText: {
     fontSize: 12,
-    marginBottom: 2,
-  },
-  contactLocationText: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   removeButton: {
     width: 32,
@@ -597,17 +768,11 @@ const styles = StyleSheet.create({
   contactSelectorContainer: {
     gap: 12,
   },
-  contactList: {
-    marginBottom: 16,
-  },
-  contactListContent: {
-    gap: 16,
-    paddingRight: 16,
-  },
   contactItem: {
     alignItems: 'center',
     gap: 8,
     width: 80,
+    marginRight: 16,
   },
   contactCircle: {
     width: 64,
@@ -626,10 +791,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pickContactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 16,
     borderRadius: 12,
     borderWidth: 2,
-    alignItems: 'center',
+    gap: 12,
   },
   pickContactButtonText: {
     fontSize: 16,
@@ -648,11 +816,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  input: {
-    borderRadius: 12,
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
-    fontSize: 16,
+    borderRadius: 12,
     borderWidth: 1,
+    gap: 12,
+  },
+  dropdownButtonText: {
+    flex: 1,
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropdownModal: {
+    width: '85%',
+    maxHeight: '70%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  dropdownTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  dropdownList: {
+    padding: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginVertical: 4,
+    gap: 12,
+  },
+  dropdownItemText: {
+    flex: 1,
+    fontSize: 16,
   },
   findButton: {
     borderRadius: 16,
@@ -672,5 +885,91 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  resultModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  resultModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  resultBottomSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 40,
+    boxShadow: '0px -4px 20px rgba(0, 0, 0, 0.15)',
+    elevation: 10,
+  },
+  resultHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  resultContent: {
+    paddingHorizontal: 24,
+  },
+  resultIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  resultTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  resultInfo: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  resultLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 80,
+  },
+  resultValue: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  mapsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 18,
+    borderRadius: 16,
+    marginBottom: 12,
+    boxShadow: '0px 4px 12px rgba(63, 81, 181, 0.3)',
+    elevation: 4,
+  },
+  mapsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  closeButton: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -10,11 +10,12 @@ import {
   Image,
   Platform,
   Alert,
-  useColorScheme,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
+import { useThemeColors } from '@/styles/commonStyles';
 
 const mockCurrentUser = {
   id: '1',
@@ -27,19 +28,7 @@ const mockCurrentUser = {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const colors = {
-    background: isDark ? '#121212' : '#F5F5F5',
-    text: isDark ? '#FFFFFF' : '#212121',
-    textSecondary: isDark ? '#B0B0B0' : '#757575',
-    primary: '#3F51B5',
-    secondary: '#E91E63',
-    card: isDark ? '#212121' : '#FFFFFF',
-    border: isDark ? '#424242' : '#E0E0E0',
-    error: '#F44336',
-  };
+  const colors = useThemeColors();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(mockCurrentUser.name);
@@ -86,133 +75,139 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          Platform.OS === 'android' && { paddingTop: 48 },
-        ]}
-      >
-        <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
-                <MaterialIcons name="person" size={48} color={colors.card} />
-              </View>
-            )}
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            Platform.OS === 'android' && { paddingTop: 48 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <View style={styles.avatarContainer}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+                  <MaterialIcons name="person" size={48} color={colors.card} />
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}
+                onPress={handlePickImage}
+              >
+                <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.email, { color: colors.textSecondary }]}>{mockCurrentUser.email}</Text>
+          </View>
+
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <View style={styles.cardHeader}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Profile Information</Text>
+              <TouchableOpacity
+                onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
+              >
+                <Text style={[styles.editButton, { color: colors.primary }]}>{isEditing ? 'Save' : 'Edit'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={[styles.label, { color: colors.text }]}>Name</Text>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter your name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={[styles.fieldValue, { color: colors.text }]}>{name}</Text>
+              )}
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={[styles.label, { color: colors.text }]}>Home Area</Text>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                  value={homeArea}
+                  onChangeText={setHomeArea}
+                  placeholder="e.g., San Francisco, CA"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              ) : (
+                <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea}</Text>
+              )}
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={[styles.label, { color: colors.text }]}>Preferences</Text>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                  value={preferences}
+                  onChangeText={setPreferences}
+                  placeholder="Your preferences..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+              ) : (
+                <Text style={[styles.fieldValue, { color: colors.text }]}>
+                  {preferences || 'No preferences set'}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
+            
             <TouchableOpacity
-              style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}
-              onPress={handlePickImage}
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/notifications')}
             >
-              <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+              <MaterialIcons name="notifications" size={24} color={colors.text} />
+              <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/privacy')}
+            >
+              <MaterialIcons name="lock" size={24} color={colors.text} />
+              <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => router.push('/settings/help')}
+            >
+              <MaterialIcons name="help" size={24} color={colors.text} />
+              <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.email, { color: colors.textSecondary }]}>{mockCurrentUser.email}</Text>
-        </View>
 
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Profile Information</Text>
-            <TouchableOpacity
-              onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
-            >
-              <Text style={[styles.editButton, { color: colors.primary }]}>{isEditing ? 'Save' : 'Edit'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Name</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your name"
-                placeholderTextColor={colors.textSecondary}
-              />
-            ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>{name}</Text>
-            )}
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Home Area</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                value={homeArea}
-                onChangeText={setHomeArea}
-                placeholder="e.g., San Francisco, CA"
-                placeholderTextColor={colors.textSecondary}
-              />
-            ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea}</Text>
-            )}
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Preferences</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                value={preferences}
-                onChangeText={setPreferences}
-                placeholder="Your preferences..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={3}
-              />
-            ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>
-                {preferences || 'No preferences set'}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
-          
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => router.push('/settings/notifications')}
-          >
-            <MaterialIcons name="notifications" size={24} color={colors.text} />
-            <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
-            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.error }]}>
+            <Text style={styles.logoutText}>Log Out</Text>
           </TouchableOpacity>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => router.push('/settings/privacy')}
-          >
-            <MaterialIcons name="lock" size={24} color={colors.text} />
-            <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
-            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <TouchableOpacity
-            style={styles.settingItem}
-            onPress={() => router.push('/settings/help')}
-          >
-            <MaterialIcons name="help" size={24} color={colors.text} />
-            <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
-            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.error }]}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
