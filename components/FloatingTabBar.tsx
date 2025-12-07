@@ -152,9 +152,10 @@ export default function FloatingTabBar({
           <View style={styles.tabsContainer}>
             {tabs.map((tab, index) => {
               const isActive = activeTabIndex === index;
+              const uniqueKey = `${tab.name}-${tab.route}`;
 
               return (
-                <React.Fragment key={index}>
+                <React.Fragment key={uniqueKey}>
                 <TouchableOpacity
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route)}

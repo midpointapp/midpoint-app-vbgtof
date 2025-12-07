@@ -39,7 +39,7 @@ const mockParticipants = [
     id: '1',
     session_id: '1',
     user_name: 'You',
-    user_lat: null, // Will be filled with device location
+    user_lat: null,
     user_lng: null,
     isCurrentUser: true,
   },
@@ -74,6 +74,16 @@ const mockSpots = [
     address: '456 Market St, San Francisco, CA',
     distance: 2.7,
   },
+  {
+    id: '3',
+    session_id: '1',
+    name: 'Philz Coffee',
+    category: 'Coffee',
+    lat: 37.7895,
+    lng: -122.3455,
+    address: '789 Mission St, San Francisco, CA',
+    distance: 2.3,
+  },
 ];
 
 function calculateMidpoint(participants: any[]) {
@@ -94,6 +104,20 @@ function calculateMidpoint(participants: any[]) {
   };
 }
 
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export default function SessionScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -102,6 +126,7 @@ export default function SessionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const colors = {
     background: isDark ? '#121212' : '#F5F5F5',
@@ -113,12 +138,12 @@ export default function SessionScreen() {
     success: '#4CAF50',
     card: isDark ? '#212121' : '#FFFFFF',
     border: isDark ? '#424242' : '#E0E0E0',
+    error: '#F44336',
   };
 
   const session = mockSessions.find((s) => s.id === id);
   let participants = mockParticipants.filter((p) => p.session_id === id);
   
-  // Update current user's location with device location
   if (myLocation) {
     participants = participants.map((p) => {
       if (p.isCurrentUser) {
@@ -132,7 +157,15 @@ export default function SessionScreen() {
     });
   }
 
-  const spots = mockSpots.filter((s) => s.session_id === id);
+  const midpoint = calculateMidpoint(participants);
+  
+  let spotsWithDistance = mockSpots.filter((s) => s.session_id === id);
+  if (midpoint) {
+    spotsWithDistance = spotsWithDistance.map((spot) => ({
+      ...spot,
+      distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
+    })).sort((a, b) => a.distance - b.distance);
+  }
 
   useEffect(() => {
     getCurrentLocation();
@@ -141,10 +174,12 @@ export default function SessionScreen() {
   const getCurrentLocation = async () => {
     try {
       setLocationLoading(true);
+      setLocationError(null);
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
+        setLocationError('Location access denied. Please enable it in Settings to use MidPoint.');
         console.log('Location permission denied');
         setLocationLoading(false);
         return;
@@ -159,7 +194,7 @@ export default function SessionScreen() {
         longitude: location.coords.longitude,
       });
 
-      console.log('Current location obtained for session:', {
+      console.log('Location obtained for session:', {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
@@ -167,6 +202,7 @@ export default function SessionScreen() {
       setLocationLoading(false);
     } catch (error) {
       console.error('Error getting location:', error);
+      setLocationError('Failed to get location. Please check your location services.');
       setLocationLoading(false);
     }
   };
@@ -179,18 +215,17 @@ export default function SessionScreen() {
     );
   }
 
-  const midpoint = calculateMidpoint(participants);
-
   const handleRefreshMidpoint = async () => {
     setRefreshing(true);
     console.log('Refreshing midpoint...');
     
-    // Re-fetch current location
     await getCurrentLocation();
     
     setTimeout(() => {
       setRefreshing(false);
-      Alert.alert('Success', 'Midpoint refreshed with your current location!');
+      if (myLocation) {
+        Alert.alert('Success', 'Midpoint refreshed with your current location!');
+      }
     }, 1000);
   };
 
@@ -212,6 +247,8 @@ export default function SessionScreen() {
       ]
     );
   };
+
+  const allUsersHaveLocation = participants.every((p) => p.user_lat && p.user_lng);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -250,14 +287,30 @@ export default function SessionScreen() {
                       Getting location...
                     </Text>
                   )}
+                  {participant.isCurrentUser && locationError && (
+                    <Text style={[styles.participantStatus, { color: colors.error }]}>
+                      {locationError}
+                    </Text>
+                  )}
                 </View>
-                {participant.user_lat && participant.user_lng && (
+                {participant.user_lat && participant.user_lng ? (
                   <MaterialIcons name="location-on" size={20} color={colors.success} />
+                ) : (
+                  <MaterialIcons name="location-off" size={20} color={colors.error} />
                 )}
               </View>
               {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
             </React.Fragment>
           ))}
+          
+          {!allUsersHaveLocation && (
+            <View style={[styles.warningBox, { backgroundColor: colors.error + '20', borderColor: colors.error }]}>
+              <MaterialIcons name="warning" size={20} color={colors.error} />
+              <Text style={[styles.warningText, { color: colors.error }]}>
+                Both users must enable location to compute a midpoint.
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -272,14 +325,26 @@ export default function SessionScreen() {
             </TouchableOpacity>
           </View>
           {midpoint ? (
-            <View style={[styles.mapPlaceholder, { backgroundColor: colors.background }]}>
-              <MaterialIcons name="map" size={48} color={colors.primary} />
-              <Text style={[styles.mapText, { color: colors.textSecondary }]}>
-                Note: react-native-maps is not supported in Natively.
-              </Text>
-              <Text style={[styles.coordinatesText, { color: colors.text }]}>
-                Midpoint: {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
-              </Text>
+            <View>
+              <View style={[styles.mapPlaceholder, { backgroundColor: colors.background }]}>
+                <MaterialIcons name="map" size={48} color={colors.primary} />
+                <Text style={[styles.mapText, { color: colors.textSecondary }]}>
+                  Note: react-native-maps is not supported in Natively.
+                </Text>
+                <Text style={[styles.coordinatesText, { color: colors.text }]}>
+                  Midpoint: {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.openMapsButton, { backgroundColor: colors.accent }]}
+                onPress={() => {
+                  const url = `https://www.google.com/maps/search/?api=1&query=${midpoint.latitude},${midpoint.longitude}`;
+                  Linking.openURL(url);
+                }}
+              >
+                <MaterialIcons name="map" size={20} color="#FFFFFF" />
+                <Text style={styles.openMapsButtonText}>Open in Maps</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View>
@@ -291,14 +356,25 @@ export default function SessionScreen() {
                   Getting your location...
                 </Text>
               )}
+              {locationError && (
+                <TouchableOpacity 
+                  style={[styles.settingsButton, { backgroundColor: colors.primary }]}
+                  onPress={() => Linking.openSettings()}
+                >
+                  <Text style={styles.settingsButtonText}>Open Settings</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Recommended Meeting Spots</Text>
-          {spots.length > 0 ? (
-            spots.map((spot, index) => (
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Nearby Meeting Places</Text>
+          <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
+            Public locations near the midpoint
+          </Text>
+          {midpoint && spotsWithDistance.length > 0 ? (
+            spotsWithDistance.map((spot, index) => (
               <React.Fragment key={spot.id}>
                 <View style={styles.spotItem}>
                   <View style={[styles.spotIcon, { backgroundColor: colors.background }]}>
@@ -310,9 +386,9 @@ export default function SessionScreen() {
                     {spot.address && (
                       <Text style={[styles.spotAddress, { color: colors.textSecondary }]}>{spot.address}</Text>
                     )}
-                    {spot.distance && (
-                      <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>{spot.distance} km away</Text>
-                    )}
+                    <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>
+                      {spot.distance.toFixed(2)} km from midpoint
+                    </Text>
                   </View>
                   <TouchableOpacity
                     style={styles.navigateButton}
@@ -321,9 +397,13 @@ export default function SessionScreen() {
                     <MaterialIcons name="navigation" size={32} color={colors.accent} />
                   </TouchableOpacity>
                 </View>
-                {index < spots.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                {index < spotsWithDistance.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
               </React.Fragment>
             ))
+          ) : !midpoint ? (
+            <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
+              Calculate midpoint first to see nearby places.
+            </Text>
           ) : (
             <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
               No spots found. Try refreshing the midpoint.
@@ -400,6 +480,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
+  cardSubtitle: {
+    fontSize: 14,
+    marginBottom: 12,
+    marginTop: -8,
+  },
   participantItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -423,6 +508,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   divider: {
     height: 1,
     marginVertical: 16,
@@ -442,6 +541,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
+    marginBottom: 12,
   },
   mapText: {
     fontSize: 14,
@@ -451,6 +551,31 @@ const styles = StyleSheet.create({
   coordinatesText: {
     fontSize: 12,
     marginTop: 8,
+    fontWeight: '600',
+  },
+  openMapsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+  },
+  openMapsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  settingsButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  settingsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
   },
   noMidpointText: {
@@ -489,6 +614,7 @@ const styles = StyleSheet.create({
   },
   spotDistance: {
     fontSize: 12,
+    fontWeight: '600',
   },
   navigateButton: {
     padding: 4,

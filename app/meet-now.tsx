@@ -1,15 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
+import * as SMS from 'expo-sms';
+
+// Placeholder download link - easily changeable
+const DOWNLOAD_LINK = 'https://example.com/download';
 
 interface SavedContact {
   id: string;
   name: string;
   initials: string;
+  phoneNumber?: string;
   lat?: number;
   lng?: number;
 }
@@ -27,10 +32,10 @@ export default function MeetNowScreen() {
   const [locationError, setLocationError] = useState<string | null>(null);
   
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([
-    { id: '1', name: 'Mom', initials: 'M', lat: 37.8044, lng: -122.2712 },
-    { id: '2', name: 'Sarah', initials: 'S', lat: 37.7749, lng: -122.4194 },
-    { id: '3', name: 'Chris', initials: 'C', lat: 37.8715, lng: -122.2730 },
-    { id: '4', name: 'Alex', initials: 'A', lat: 37.7897, lng: -122.3453 },
+    { id: '1', name: 'Mom', initials: 'M', phoneNumber: '+1234567890', lat: 37.8044, lng: -122.2712 },
+    { id: '2', name: 'Sarah', initials: 'S', phoneNumber: '+1234567891', lat: 37.7749, lng: -122.4194 },
+    { id: '3', name: 'Chris', initials: 'C', phoneNumber: '+1234567892', lat: 37.8715, lng: -122.2730 },
+    { id: '4', name: 'Alex', initials: 'A', phoneNumber: '+1234567893', lat: 37.7897, lng: -122.3453 },
   ]);
 
   useEffect(() => {
@@ -42,21 +47,22 @@ export default function MeetNowScreen() {
       setLocationLoading(true);
       setLocationError(null);
 
-      // Request foreground permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
-        setLocationError('Location permission denied');
+        setLocationError('Location access denied. Please enable it in Settings to use MidPoint.');
         Alert.alert(
-          'Permission Required',
-          'Please grant location permission to use MidPoint. Your location is needed to calculate the meeting point.',
-          [{ text: 'OK' }]
+          'Location Access Denied',
+          'Location access denied. Please enable it in Settings to use MidPoint.',
+          [
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            { text: 'Cancel' }
+          ]
         );
         setLocationLoading(false);
         return;
       }
 
-      // Get current position
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
@@ -66,7 +72,7 @@ export default function MeetNowScreen() {
         longitude: location.coords.longitude,
       });
 
-      console.log('Current location obtained:', {
+      console.log('Location obtained:', {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
@@ -74,11 +80,15 @@ export default function MeetNowScreen() {
       setLocationLoading(false);
     } catch (error) {
       console.error('Error getting location:', error);
-      setLocationError('Failed to get location');
+      setLocationError('Failed to get location. Please check your location services.');
       Alert.alert(
         'Location Error',
-        'Unable to get your current location. Please make sure location services are enabled.',
-        [{ text: 'OK' }]
+        'Unable to get your current location. Please make sure location services are enabled in Settings.',
+        [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Retry', onPress: getCurrentLocation },
+          { text: 'Cancel' }
+        ]
       );
       setLocationLoading(false);
     }
@@ -102,16 +112,19 @@ export default function MeetNowScreen() {
           const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
           const initials = (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || 'U';
           
+          const phoneNumber = contact.phoneNumbers && contact.phoneNumbers.length > 0 
+            ? contact.phoneNumbers[0].number 
+            : undefined;
+          
           const newContact: SavedContact = {
             id: contact.id || Date.now().toString(),
             name: fullName,
             initials: initials,
-            // Note: Device contacts don't have location data by default
-            // In a real app, you'd need to store this separately or ask the user
+            phoneNumber: phoneNumber,
           };
           
           setSelectedContact(newContact);
-          console.log('Selected contact from device:', newContact.name);
+          console.log('Selected contact from device:', newContact.name, phoneNumber);
         }
       } else {
         Alert.alert(
@@ -126,12 +139,67 @@ export default function MeetNowScreen() {
     }
   };
 
+  const handleSendInviteSMS = async () => {
+    if (!selectedContact) {
+      Alert.alert('No Contact Selected', 'Please select a contact first.');
+      return;
+    }
+
+    if (!selectedContact.phoneNumber) {
+      Alert.alert(
+        'No Phone Number',
+        'This contact does not have a phone number. Please select a different contact or add their phone number.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      const isAvailable = await SMS.isAvailableAsync();
+      
+      if (!isAvailable) {
+        Alert.alert(
+          'SMS Not Available',
+          'SMS is not available on this device. You can manually share the download link:\n\n' + DOWNLOAD_LINK,
+          [
+            { text: 'Copy Link', onPress: () => console.log('Link copied to clipboard') },
+            { text: 'Close' }
+          ]
+        );
+        return;
+      }
+
+      const message = `Hey, download the MidPoint app so we can find a meeting spot halfway between us: ${DOWNLOAD_LINK}`;
+      
+      const { result } = await SMS.sendSMSAsync(
+        [selectedContact.phoneNumber],
+        message
+      );
+
+      console.log('SMS result:', result);
+      
+      if (result === 'sent') {
+        Alert.alert('Success', 'Invite sent successfully!');
+      } else if (result === 'cancelled') {
+        console.log('User cancelled SMS');
+      }
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+      Alert.alert(
+        'Error',
+        'Failed to send SMS. You can manually share the download link:\n\n' + DOWNLOAD_LINK,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const handleFind = () => {
     if (!myLocation) {
       Alert.alert(
         'Location Required',
-        'Please wait while we get your current location, or enable location services.',
+        'Both users must enable location to compute a midpoint. Please enable location services.',
         [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
           { text: 'Retry', onPress: getCurrentLocation },
           { text: 'Cancel' }
         ]
@@ -144,7 +212,15 @@ export default function MeetNowScreen() {
       return;
     }
 
-    // Calculate midpoint using my device location and contact's location
+    if (!selectedContact.lat || !selectedContact.lng) {
+      Alert.alert(
+        'Contact Location Missing',
+        'The selected contact does not have a location set. Both users must enable location to compute a midpoint.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     const userA = {
       name: 'You',
       lat: myLocation.latitude,
@@ -153,8 +229,8 @@ export default function MeetNowScreen() {
 
     const userB = {
       name: selectedContact.name,
-      lat: selectedContact.lat || myLocation.latitude, // Fallback if contact has no location
-      lng: selectedContact.lng || myLocation.longitude,
+      lat: selectedContact.lat,
+      lng: selectedContact.lng,
     };
 
     const midpointLat = (userA.lat + userB.lat) / 2;
@@ -172,19 +248,7 @@ export default function MeetNowScreen() {
       console.log('Safe Meet mode: Only public locations will be suggested');
     }
     
-    Alert.alert(
-      'Midpoint Calculated',
-      `Meeting point between you and ${selectedContact.name}:\n\nLatitude: ${midpointLat.toFixed(4)}\nLongitude: ${midpointLng.toFixed(4)}`,
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
-  };
-
-  const getInitials = (name: string) => {
-    const parts = name.split(' ');
-    if (parts.length >= 2) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    }
-    return name.charAt(0).toUpperCase();
+    router.push(`/session/1?midpointLat=${midpointLat}&midpointLng=${midpointLng}&contactName=${selectedContact.name}&type=${type}&safeMode=${isSafeMode}` as any);
   };
 
   return (
@@ -205,7 +269,6 @@ export default function MeetNowScreen() {
 
       <Text style={[styles.title, { color: colors.text }]}>Meet in the Middle</Text>
 
-      {/* My Location Status */}
       <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.locationHeader}>
           <Text style={[styles.locationLabel, { color: colors.text }]}>Your Location</Text>
@@ -227,9 +290,21 @@ export default function MeetNowScreen() {
               {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
             </Text>
           </View>
+        ) : locationError ? (
+          <View>
+            <Text style={[styles.locationText, { color: colors.error }]}>
+              {locationError}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.settingsButton, { backgroundColor: colors.primary }]}
+              onPress={() => Linking.openSettings()}
+            >
+              <Text style={styles.settingsButtonText}>Open Settings</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-            {locationError || 'Waiting for location...'}
+            Waiting for location...
           </Text>
         )}
       </View>
@@ -246,6 +321,11 @@ export default function MeetNowScreen() {
               <Text style={[styles.selectedContactName, { color: colors.text }]}>
                 {selectedContact.name}
               </Text>
+              {selectedContact.phoneNumber && (
+                <Text style={[styles.contactPhoneText, { color: colors.textSecondary }]}>
+                  {selectedContact.phoneNumber}
+                </Text>
+              )}
               {selectedContact.lat && selectedContact.lng && (
                 <Text style={[styles.contactLocationText, { color: colors.textSecondary }]}>
                   Location: {selectedContact.lat.toFixed(4)}, {selectedContact.lng.toFixed(4)}
@@ -297,6 +377,18 @@ export default function MeetNowScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {selectedContact && selectedContact.phoneNumber && (
+          <TouchableOpacity
+            style={[styles.inviteButton, { backgroundColor: colors.secondary }]}
+            onPress={handleSendInviteSMS}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.inviteButtonText}>
+              📲 Send Download Link via SMS
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -392,6 +484,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
+  settingsButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  settingsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   section: {
     marginBottom: 28,
   },
@@ -426,6 +530,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  contactPhoneText: {
+    fontSize: 12,
+    marginBottom: 2,
   },
   contactLocationText: {
     fontSize: 12,
@@ -479,6 +587,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pickContactButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  inviteButton: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    boxShadow: '0px 4px 12px rgba(233, 30, 99, 0.3)',
+    elevation: 4,
+  },
+  inviteButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
