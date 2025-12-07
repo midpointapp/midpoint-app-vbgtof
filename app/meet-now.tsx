@@ -4,11 +4,14 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Contacts from 'expo-contacts';
+import * as Location from 'expo-location';
 
 interface SavedContact {
   id: string;
   name: string;
   initials: string;
+  lat?: number;
+  lng?: number;
 }
 
 export default function MeetNowScreen() {
@@ -19,12 +22,67 @@ export default function MeetNowScreen() {
 
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
   const [type, setType] = useState('');
+  const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(true);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([
-    { id: '1', name: 'Mom', initials: 'M' },
-    { id: '2', name: 'Sarah', initials: 'S' },
-    { id: '3', name: 'Chris', initials: 'C' },
-    { id: '4', name: 'Alex', initials: 'A' },
+    { id: '1', name: 'Mom', initials: 'M', lat: 37.8044, lng: -122.2712 },
+    { id: '2', name: 'Sarah', initials: 'S', lat: 37.7749, lng: -122.4194 },
+    { id: '3', name: 'Chris', initials: 'C', lat: 37.8715, lng: -122.2730 },
+    { id: '4', name: 'Alex', initials: 'A', lat: 37.7897, lng: -122.3453 },
   ]);
+
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
+
+  const getCurrentLocation = async () => {
+    try {
+      setLocationLoading(true);
+      setLocationError(null);
+
+      // Request foreground permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setLocationError('Location permission denied');
+        Alert.alert(
+          'Permission Required',
+          'Please grant location permission to use MidPoint. Your location is needed to calculate the meeting point.',
+          [{ text: 'OK' }]
+        );
+        setLocationLoading(false);
+        return;
+      }
+
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setMyLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      console.log('Current location obtained:', {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      setLocationLoading(false);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setLocationError('Failed to get location');
+      Alert.alert(
+        'Location Error',
+        'Unable to get your current location. Please make sure location services are enabled.',
+        [{ text: 'OK' }]
+      );
+      setLocationLoading(false);
+    }
+  };
 
   const handleSelectContact = (contact: SavedContact) => {
     setSelectedContact(contact);
@@ -48,6 +106,8 @@ export default function MeetNowScreen() {
             id: contact.id || Date.now().toString(),
             name: fullName,
             initials: initials,
+            // Note: Device contacts don't have location data by default
+            // In a real app, you'd need to store this separately or ask the user
           };
           
           setSelectedContact(newContact);
@@ -67,13 +127,43 @@ export default function MeetNowScreen() {
   };
 
   const handleFind = () => {
+    if (!myLocation) {
+      Alert.alert(
+        'Location Required',
+        'Please wait while we get your current location, or enable location services.',
+        [
+          { text: 'Retry', onPress: getCurrentLocation },
+          { text: 'Cancel' }
+        ]
+      );
+      return;
+    }
+
     if (!selectedContact) {
       Alert.alert('No Contact Selected', 'Please select a contact to meet with.');
       return;
     }
 
+    // Calculate midpoint using my device location and contact's location
+    const userA = {
+      name: 'You',
+      lat: myLocation.latitude,
+      lng: myLocation.longitude,
+    };
+
+    const userB = {
+      name: selectedContact.name,
+      lat: selectedContact.lat || myLocation.latitude, // Fallback if contact has no location
+      lng: selectedContact.lng || myLocation.longitude,
+    };
+
+    const midpointLat = (userA.lat + userB.lat) / 2;
+    const midpointLng = (userA.lng + userB.lng) / 2;
+
     console.log('Find midpoint with:', { 
-      person: selectedContact.name, 
+      userA,
+      userB,
+      midpoint: { lat: midpointLat, lng: midpointLng },
       type,
       safeMode: isSafeMode 
     });
@@ -82,7 +172,11 @@ export default function MeetNowScreen() {
       console.log('Safe Meet mode: Only public locations will be suggested');
     }
     
-    router.back();
+    Alert.alert(
+      'Midpoint Calculated',
+      `Meeting point between you and ${selectedContact.name}:\n\nLatitude: ${midpointLat.toFixed(4)}\nLongitude: ${midpointLng.toFixed(4)}`,
+      [{ text: 'OK', onPress: () => router.back() }]
+    );
   };
 
   const getInitials = (name: string) => {
@@ -111,6 +205,35 @@ export default function MeetNowScreen() {
 
       <Text style={[styles.title, { color: colors.text }]}>Meet in the Middle</Text>
 
+      {/* My Location Status */}
+      <View style={[styles.locationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.locationHeader}>
+          <Text style={[styles.locationLabel, { color: colors.text }]}>Your Location</Text>
+          {locationLoading && (
+            <Text style={[styles.locationStatus, { color: colors.textSecondary }]}>Getting location...</Text>
+          )}
+          {locationError && (
+            <TouchableOpacity onPress={getCurrentLocation}>
+              <Text style={[styles.locationStatus, { color: colors.error }]}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {myLocation ? (
+          <View style={styles.locationInfo}>
+            <Text style={[styles.locationText, { color: colors.success }]}>
+              ✓ Location obtained
+            </Text>
+            <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
+              {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+            {locationError || 'Waiting for location...'}
+          </Text>
+        )}
+      </View>
+
       <View style={styles.section}>
         <Text style={[styles.label, { color: colors.text }]}>Who are you meeting?</Text>
         
@@ -119,9 +242,16 @@ export default function MeetNowScreen() {
             <View style={[styles.contactAvatar, { backgroundColor: colors.primary }]}>
               <Text style={styles.contactInitials}>{selectedContact.initials}</Text>
             </View>
-            <Text style={[styles.selectedContactName, { color: colors.text }]}>
-              {selectedContact.name}
-            </Text>
+            <View style={styles.selectedContactInfo}>
+              <Text style={[styles.selectedContactName, { color: colors.text }]}>
+                {selectedContact.name}
+              </Text>
+              {selectedContact.lat && selectedContact.lng && (
+                <Text style={[styles.contactLocationText, { color: colors.textSecondary }]}>
+                  Location: {selectedContact.lat.toFixed(4)}, {selectedContact.lng.toFixed(4)}
+                </Text>
+              )}
+            </View>
             <TouchableOpacity 
               onPress={() => setSelectedContact(null)}
               style={styles.removeButton}
@@ -186,11 +316,18 @@ export default function MeetNowScreen() {
       </View>
 
       <TouchableOpacity
-        style={[styles.findButton, { backgroundColor: colors.primary }]}
+        style={[
+          styles.findButton, 
+          { backgroundColor: colors.primary },
+          (!myLocation || locationLoading) && styles.findButtonDisabled
+        ]}
         onPress={handleFind}
         activeOpacity={0.8}
+        disabled={!myLocation || locationLoading}
       >
-        <Text style={styles.findButtonText}>Find Midpoint</Text>
+        <Text style={styles.findButtonText}>
+          {locationLoading ? 'Getting Location...' : 'Find Midpoint'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -222,7 +359,38 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: 32,
+    marginBottom: 24,
+  },
+  locationCard: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  locationLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  locationStatus: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  locationInfo: {
+    gap: 4,
+  },
+  locationText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  coordinatesText: {
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   section: {
     marginBottom: 28,
@@ -251,10 +419,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  selectedContactName: {
+  selectedContactInfo: {
     flex: 1,
+  },
+  selectedContactName: {
     fontSize: 18,
     fontWeight: '600',
+    marginBottom: 4,
+  },
+  contactLocationText: {
+    fontSize: 12,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   removeButton: {
     width: 32,
@@ -322,6 +497,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
     boxShadow: '0px 4px 12px rgba(63, 81, 181, 0.3)',
     elevation: 4,
+  },
+  findButtonDisabled: {
+    opacity: 0.5,
   },
   findButtonText: {
     color: '#FFFFFF',

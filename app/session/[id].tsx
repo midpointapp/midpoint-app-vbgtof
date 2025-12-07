@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as Location from 'expo-location';
 
 const mockSessions = [
   {
@@ -37,9 +38,10 @@ const mockParticipants = [
   {
     id: '1',
     session_id: '1',
-    user_name: 'John Doe',
-    user_lat: 37.7749,
-    user_lng: -122.4194,
+    user_name: 'You',
+    user_lat: null, // Will be filled with device location
+    user_lng: null,
+    isCurrentUser: true,
   },
   {
     id: '2',
@@ -47,6 +49,7 @@ const mockParticipants = [
     user_name: 'Sarah Smith',
     user_lat: 37.8044,
     user_lng: -122.2712,
+    isCurrentUser: false,
   },
 ];
 
@@ -97,6 +100,8 @@ export default function SessionScreen() {
   const isDark = colorScheme === 'dark';
   const { id } = useLocalSearchParams();
   const [refreshing, setRefreshing] = useState(false);
+  const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(true);
 
   const colors = {
     background: isDark ? '#121212' : '#F5F5F5',
@@ -111,8 +116,60 @@ export default function SessionScreen() {
   };
 
   const session = mockSessions.find((s) => s.id === id);
-  const participants = mockParticipants.filter((p) => p.session_id === id);
+  let participants = mockParticipants.filter((p) => p.session_id === id);
+  
+  // Update current user's location with device location
+  if (myLocation) {
+    participants = participants.map((p) => {
+      if (p.isCurrentUser) {
+        return {
+          ...p,
+          user_lat: myLocation.latitude,
+          user_lng: myLocation.longitude,
+        };
+      }
+      return p;
+    });
+  }
+
   const spots = mockSpots.filter((s) => s.session_id === id);
+
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
+
+  const getCurrentLocation = async () => {
+    try {
+      setLocationLoading(true);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        setLocationLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setMyLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      console.log('Current location obtained for session:', {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      setLocationLoading(false);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setLocationLoading(false);
+    }
+  };
 
   if (!session) {
     return (
@@ -124,12 +181,16 @@ export default function SessionScreen() {
 
   const midpoint = calculateMidpoint(participants);
 
-  const handleRefreshMidpoint = () => {
+  const handleRefreshMidpoint = async () => {
     setRefreshing(true);
     console.log('Refreshing midpoint...');
+    
+    // Re-fetch current location
+    await getCurrentLocation();
+    
     setTimeout(() => {
       setRefreshing(false);
-      Alert.alert('Success', 'Midpoint refreshed!');
+      Alert.alert('Success', 'Midpoint refreshed with your current location!');
     }, 1000);
   };
 
@@ -179,7 +240,17 @@ export default function SessionScreen() {
                 <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
                   <MaterialIcons name="person" size={24} color={colors.card} />
                 </View>
-                <Text style={[styles.participantName, { color: colors.text }]}>{participant.user_name}</Text>
+                <View style={styles.participantInfo}>
+                  <Text style={[styles.participantName, { color: colors.text }]}>
+                    {participant.user_name}
+                    {participant.isCurrentUser && ' (You)'}
+                  </Text>
+                  {participant.isCurrentUser && locationLoading && (
+                    <Text style={[styles.participantStatus, { color: colors.textSecondary }]}>
+                      Getting location...
+                    </Text>
+                  )}
+                </View>
                 {participant.user_lat && participant.user_lng && (
                   <MaterialIcons name="location-on" size={20} color={colors.success} />
                 )}
@@ -211,9 +282,16 @@ export default function SessionScreen() {
               </Text>
             </View>
           ) : (
-            <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
-              Waiting for participant locations...
-            </Text>
+            <View>
+              <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
+                Waiting for participant locations...
+              </Text>
+              {locationLoading && (
+                <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
+                  Getting your location...
+                </Text>
+              )}
+            </View>
           )}
         </View>
 
@@ -335,9 +413,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  participantName: {
+  participantInfo: {
     flex: 1,
+  },
+  participantName: {
     fontSize: 16,
+  },
+  participantStatus: {
+    fontSize: 12,
+    marginTop: 2,
   },
   divider: {
     height: 1,
