@@ -133,34 +133,34 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
             ]}
           />
           <View style={styles.tabsContainer}>
-            {tabs.map((tab, index) => {
-              const isActive = activeTabIndex === index;
+            {tabs.map((tab) => {
+              const isActive = activeTabIndex === tabs.indexOf(tab);
+              const uniqueKey = `${tab.name}-${tab.route}`;
 
               return (
-                <React.Fragment key={index}>
-                  <TouchableOpacity
-                    style={styles.tab}
-                    onPress={() => handleTabPress(tab.route)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.tabContent}>
-                      <MaterialIcons
-                        name={tab.icon}
-                        size={24}
-                        color={isActive ? colors.primary : colors.textSecondary}
-                      />
-                      <Text
-                        style={[
-                          styles.tabLabel,
-                          { color: colors.textSecondary },
-                          isActive && { color: colors.primary, fontWeight: '600' },
-                        ]}
-                      >
-                        {tab.label}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </React.Fragment>
+                <TouchableOpacity
+                  key={uniqueKey}
+                  style={styles.tab}
+                  onPress={() => handleTabPress(tab.route)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.tabContent}>
+                    <MaterialIcons
+                      name={tab.icon}
+                      size={24}
+                      color={isActive ? colors.primary : colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.tabLabel,
+                        { color: colors.textSecondary },
+                        isActive && { color: colors.primary, fontWeight: '600' },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>

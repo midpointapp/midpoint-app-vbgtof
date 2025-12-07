@@ -7,8 +7,8 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 
-// Placeholder download link - easily changeable
-const DOWNLOAD_LINK = 'https://example.com/download';
+// Download link constant - easily changeable
+const DOWNLOAD_LINK = 'https://midpointapp.yourlink';
 
 interface SavedContact {
   id: string;
@@ -19,6 +19,12 @@ interface SavedContact {
   lng?: number;
 }
 
+interface LocationWithAddress {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
 export default function MeetNowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -27,7 +33,7 @@ export default function MeetNowScreen() {
 
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
   const [type, setType] = useState('');
-  const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [myLocation, setMyLocation] = useState<LocationWithAddress | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
   
@@ -42,6 +48,31 @@ export default function MeetNowScreen() {
     getCurrentLocation();
   }, []);
 
+  const reverseGeocode = async (latitude: number, longitude: number): Promise<string | null> => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+      
+      if (results && results.length > 0) {
+        const address = results[0];
+        const parts = [
+          address.streetNumber,
+          address.street,
+          address.city,
+          address.region,
+          address.postalCode,
+        ].filter(Boolean);
+        
+        const formattedAddress = parts.join(', ');
+        console.log('Reverse geocoded address:', formattedAddress);
+        return formattedAddress || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      return null;
+    }
+  };
+
   const getCurrentLocation = async () => {
     try {
       setLocationLoading(true);
@@ -50,7 +81,7 @@ export default function MeetNowScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
-        setLocationError('Location access denied. Please enable it in Settings to use MidPoint.');
+        setLocationError('Location access denied. Enable in Settings.');
         Alert.alert(
           'Location Access Denied',
           'Location access denied. Please enable it in Settings to use MidPoint.',
@@ -67,20 +98,24 @@ export default function MeetNowScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
+      const address = await reverseGeocode(location.coords.latitude, location.coords.longitude);
+
       setMyLocation({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        address: address || undefined,
       });
 
       console.log('Location obtained:', {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
+        address,
       });
 
       setLocationLoading(false);
     } catch (error) {
       console.error('Error getting location:', error);
-      setLocationError('Failed to get location. Please check your location services.');
+      setLocationError('Failed to get location. Check location services.');
       Alert.alert(
         'Location Error',
         'Unable to get your current location. Please make sure location services are enabled in Settings.',
@@ -286,6 +321,11 @@ export default function MeetNowScreen() {
             <Text style={[styles.locationText, { color: colors.success }]}>
               ✓ Location obtained
             </Text>
+            {myLocation.address && !isSafeMode && (
+              <Text style={[styles.addressText, { color: colors.text }]} numberOfLines={2}>
+                {myLocation.address}
+              </Text>
+            )}
             <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
               {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
             </Text>
@@ -474,11 +514,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   locationInfo: {
-    gap: 4,
+    gap: 6,
   },
   locationText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  addressText: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   coordinatesText: {
     fontSize: 12,

@@ -53,7 +53,18 @@ const mockParticipants = [
   },
 ];
 
-const mockSpots = [
+interface Spot {
+  id: string;
+  session_id: string;
+  name: string;
+  category: string;
+  lat: number;
+  lng: number;
+  address?: string;
+  distance?: number;
+}
+
+const mockSpots: Spot[] = [
   {
     id: '1',
     session_id: '1',
@@ -61,7 +72,7 @@ const mockSpots = [
     category: 'Coffee',
     lat: 37.7897,
     lng: -122.3453,
-    address: '123 Main St, San Francisco, CA',
+    address: '300 Webster St, Oakland, CA 94607',
     distance: 2.5,
   },
   {
@@ -71,7 +82,7 @@ const mockSpots = [
     category: 'Coffee',
     lat: 37.7900,
     lng: -122.3450,
-    address: '456 Market St, San Francisco, CA',
+    address: '350 Grand Ave, Oakland, CA 94610',
     distance: 2.7,
   },
   {
@@ -81,8 +92,28 @@ const mockSpots = [
     category: 'Coffee',
     lat: 37.7895,
     lng: -122.3455,
-    address: '789 Mission St, San Francisco, CA',
+    address: '789 Mission St, San Francisco, CA 94103',
     distance: 2.3,
+  },
+  {
+    id: '4',
+    session_id: '1',
+    name: 'Peet&apos;s Coffee',
+    category: 'Coffee',
+    lat: 37.7892,
+    lng: -122.3458,
+    address: '456 Market St, San Francisco, CA 94102',
+    distance: 2.6,
+  },
+  {
+    id: '5',
+    session_id: '1',
+    name: 'Local Grounds',
+    category: 'Coffee',
+    lat: 37.7888,
+    lng: -122.3460,
+    address: '123 Main St, Oakland, CA 94612',
+    distance: 2.4,
   },
 ];
 
@@ -127,6 +158,7 @@ export default function SessionScreen() {
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
 
   const colors = {
     background: isDark ? '#121212' : '#F5F5F5',
@@ -171,6 +203,36 @@ export default function SessionScreen() {
     getCurrentLocation();
   }, []);
 
+  useEffect(() => {
+    if (midpoint) {
+      reverseGeocodeMidpoint(midpoint.latitude, midpoint.longitude);
+    }
+  }, [midpoint]);
+
+  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+      
+      if (results && results.length > 0) {
+        const address = results[0];
+        const parts = [
+          address.streetNumber,
+          address.street,
+          address.city,
+          address.region,
+          address.postalCode,
+        ].filter(Boolean);
+        
+        const formattedAddress = parts.join(', ');
+        setMidpointAddress(formattedAddress || null);
+        console.log('Midpoint address:', formattedAddress);
+      }
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      setMidpointAddress(null);
+    }
+  };
+
   const getCurrentLocation = async () => {
     try {
       setLocationLoading(true);
@@ -179,7 +241,7 @@ export default function SessionScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
-        setLocationError('Location access denied. Please enable it in Settings to use MidPoint.');
+        setLocationError('Location access denied. Enable in Settings.');
         console.log('Location permission denied');
         setLocationLoading(false);
         return;
@@ -202,7 +264,7 @@ export default function SessionScreen() {
       setLocationLoading(false);
     } catch (error) {
       console.error('Error getting location:', error);
-      setLocationError('Failed to get location. Please check your location services.');
+      setLocationError('Failed to get location. Check location services.');
       setLocationLoading(false);
     }
   };
@@ -229,7 +291,7 @@ export default function SessionScreen() {
     }, 1000);
   };
 
-  const handleNavigate = (spot: any) => {
+  const handleNavigate = (spot: Spot) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
     Linking.openURL(url).catch((err) =>
       console.error('Error opening maps:', err)
@@ -331,8 +393,13 @@ export default function SessionScreen() {
                 <Text style={[styles.mapText, { color: colors.textSecondary }]}>
                   Note: react-native-maps is not supported in Natively.
                 </Text>
-                <Text style={[styles.coordinatesText, { color: colors.text }]}>
-                  Midpoint: {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
+                {midpointAddress && (
+                  <Text style={[styles.addressText, { color: colors.text }]}>
+                    {midpointAddress}
+                  </Text>
+                )}
+                <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
+                  {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -384,10 +451,15 @@ export default function SessionScreen() {
                     <Text style={[styles.spotName, { color: colors.text }]}>{spot.name}</Text>
                     <Text style={[styles.spotCategory, { color: colors.primary }]}>{spot.category}</Text>
                     {spot.address && (
-                      <Text style={[styles.spotAddress, { color: colors.textSecondary }]}>{spot.address}</Text>
+                      <Text style={[styles.spotAddress, { color: colors.text }]} numberOfLines={1}>
+                        {spot.address}
+                      </Text>
                     )}
+                    <Text style={[styles.spotCoordinates, { color: colors.textSecondary }]}>
+                      {spot.lat.toFixed(4)}, {spot.lng.toFixed(4)}
+                    </Text>
                     <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>
-                      {spot.distance.toFixed(2)} km from midpoint
+                      {spot.distance?.toFixed(2)} km from midpoint
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -547,11 +619,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 12,
+    marginBottom: 8,
+  },
+  addressText: {
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
   },
   coordinatesText: {
     fontSize: 12,
-    marginTop: 8,
     fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   openMapsButton: {
     flexDirection: 'row',
@@ -606,10 +685,16 @@ const styles = StyleSheet.create({
   },
   spotCategory: {
     fontSize: 14,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   spotAddress: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  spotCoordinates: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     marginBottom: 2,
   },
   spotDistance: {

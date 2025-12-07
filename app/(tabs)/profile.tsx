@@ -12,7 +12,9 @@ import {
   Alert,
   useColorScheme,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as ImagePicker from 'expo-image-picker';
 
 const mockCurrentUser = {
   id: '1',
@@ -24,6 +26,7 @@ const mockCurrentUser = {
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -42,11 +45,44 @@ export default function ProfileScreen() {
   const [name, setName] = useState(mockCurrentUser.name);
   const [homeArea, setHomeArea] = useState(mockCurrentUser.home_area);
   const [preferences, setPreferences] = useState(mockCurrentUser.preferences || '');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(mockCurrentUser.photo);
 
   const handleSave = () => {
-    console.log('Saving profile:', { name, homeArea, preferences });
+    console.log('Saving profile:', { name, homeArea, preferences, profilePhoto });
     Alert.alert('Success', 'Profile updated successfully!');
     setIsEditing(false);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant photo library access to upload a profile photo.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const imageUri = result.assets[0].uri;
+        setProfilePhoto(imageUri);
+        console.log('Profile photo updated:', imageUri);
+        Alert.alert('Success', 'Profile photo updated!');
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
   };
 
   return (
@@ -60,14 +96,17 @@ export default function ProfileScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            {mockCurrentUser.photo ? (
-              <Image source={{ uri: mockCurrentUser.photo }} style={styles.avatar} />
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
                 <MaterialIcons name="person" size={48} color={colors.card} />
               </View>
             )}
-            <TouchableOpacity style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}>
+            <TouchableOpacity
+              style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}
+              onPress={handlePickImage}
+            >
               <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -136,7 +175,11 @@ export default function ProfileScreen() {
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
-          <TouchableOpacity style={styles.settingItem}>
+          
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={() => router.push('/settings/notifications')}
+          >
             <MaterialIcons name="notifications" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -144,7 +187,10 @@ export default function ProfileScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={() => router.push('/settings/privacy')}
+          >
             <MaterialIcons name="lock" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -152,7 +198,10 @@ export default function ProfileScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={() => router.push('/settings/help')}
+          >
             <MaterialIcons name="help" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
