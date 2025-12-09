@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Stack } from 'expo-router';
 import {
@@ -130,7 +131,7 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
                   backgroundColor: isDark
                     ? 'rgba(33, 33, 33, 0.95)'
                     : 'rgba(255, 255, 255, 0.95)',
-                  // @ts-ignore web-only style
+                  // @ts-expect-error web-only style
                   backdropFilter: 'blur(10px)',
                 },
               }),

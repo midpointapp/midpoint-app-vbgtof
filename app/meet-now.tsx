@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -67,11 +67,6 @@ export default function MeetNowScreen() {
   const [searchingPlaces, setSearchingPlaces] = useState(false);
   const [midpointCoords, setMidpointCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  useEffect(() => {
-    loadUserName();
-    getCurrentLocation();
-  }, []);
-
   const loadUserName = async () => {
     try {
       const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
@@ -109,7 +104,7 @@ export default function MeetNowScreen() {
     }
   };
 
-  const getCurrentLocation = async () => {
+  const getCurrentLocation = useCallback(async () => {
     try {
       setLocationLoading(true);
       setLocationError(null);
@@ -163,7 +158,12 @@ export default function MeetNowScreen() {
       );
       setLocationLoading(false);
     }
-  };
+  }, [isSafeMode]);
+
+  useEffect(() => {
+    loadUserName();
+    getCurrentLocation();
+  }, [getCurrentLocation]);
 
   const handlePickFromContacts = async () => {
     try {

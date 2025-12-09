@@ -54,7 +54,7 @@ export default function InviteScreen() {
         [{ text: 'Go Back', onPress: () => router.back() }]
       );
     }
-  }, [inviterLat, inviterLng]);
+  }, [inviterLat, inviterLng, router]);
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string | null> => {
     try {
