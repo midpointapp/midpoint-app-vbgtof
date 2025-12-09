@@ -4,16 +4,18 @@
 
 export const GOOGLE_PLACES_API_KEY = 'AIzaSyBMxU0JXR2Iq1Lj0ao0Dj_5x134GuRaYd8';
 
-// Base URL for deep links - ALWAYS use root path with query parameters
-export const DOWNLOAD_LINK = 'https://midpoint-app-vbgtof.natively.dev';
+// Base URL for deep links - ALWAYS use /meet-now path with query parameters
+export const DOWNLOAD_LINK = 'https://web-midpoint-app-vbgtof.natively.dev';
 
 export const DEFAULT_SEARCH_RADIUS = 10000; // meters (10km)
 
 /**
  * Generate a share URL for a MeetPoint
- * IMPORTANT: Always use root path with query parameter
- * Format: https://midpoint-app-vbgtof.natively.dev/?meetPointId=<id>
+ * IMPORTANT: Always use /meet-now path with query parameter
+ * Format: https://web-midpoint-app-vbgtof.natively.dev/meet-now?meetPointId=<id>
  */
 export const generateShareUrl = (meetPointId: string): string => {
-  return `${DOWNLOAD_LINK}/?meetPointId=${meetPointId}`;
+  const url = `${DOWNLOAD_LINK}/meet-now?meetPointId=${meetPointId}`;
+  console.log('[Invite] SMS link:', url);
+  return url;
 };

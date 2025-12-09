@@ -26,6 +26,7 @@ import { generateShareUrl } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/app/integrations/supabase/client';
 import { generateId } from '@/utils/idGenerator';
+import { calculateMidpoint, searchNearbyPlaces } from '@/utils/locationUtils';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const USER_STORAGE_KEY = '@midpoint_user';
@@ -64,12 +65,24 @@ interface LocationWithAddress {
   address?: string;
 }
 
+interface Place {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  rating: number;
+  distance: number;
+  placeId?: string;
+}
+
 interface MeetPoint {
   id: string;
   meet_point_id: string;
   sender_name: string;
   sender_lat: number;
   sender_lng: number;
+  receiver_name: string | null;
   receiver_lat: number | null;
   receiver_lng: number | null;
   type: string;
@@ -94,6 +107,17 @@ export default function MeetNowScreen() {
   const isSafeMode = params?.safeMode === 'true';
   const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // Check if we're in session view mode (meetPointId present)
+  const [sessionMeetPointId, setSessionMeetPointId] = useState<string | null>(null);
+  const [isSessionMode, setIsSessionMode] = useState(false);
+
+  // Session view state
+  const [sessionMeetPoint, setSessionMeetPoint] = useState<MeetPoint | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionPlaces, setSessionPlaces] = useState<Place[]>([]);
+  const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
+
+  // Create mode state
   const [currentUserName, setCurrentUserName] = useState('User');
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
   const [selectedMeetupType, setSelectedMeetupType] = useState<string | null>(null);
@@ -112,6 +136,243 @@ export default function MeetNowScreen() {
 
   // Select the appropriate dropdown list based on mode
   const MEETUP_TYPES = isSafeMode ? MEETUP_TYPES_SAFE : MEETUP_TYPES_REGULAR;
+
+  // Check for meetPointId in URL on mount (especially for web)
+  useEffect(() => {
+    const checkForMeetPointId = () => {
+      // First check URL params
+      if (params?.meetPointId) {
+        const meetPointId = Array.isArray(params.meetPointId) 
+          ? params.meetPointId[0] 
+          : params.meetPointId;
+        console.log('[MeetNow] detected meetPointId from params:', meetPointId);
+        setSessionMeetPointId(meetPointId);
+        setIsSessionMode(true);
+        return;
+      }
+
+      // On web, also check window.location.search
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const searchParams = new URLSearchParams(window.location.search);
+        const meetPointId = searchParams.get('meetPointId');
+        if (meetPointId) {
+          console.log('[MeetNow] detected meetPointId from window.location:', meetPointId);
+          setSessionMeetPointId(meetPointId);
+          setIsSessionMode(true);
+          return;
+        }
+      }
+
+      // No meetPointId found, stay in create mode
+      console.log('[MeetNow] No meetPointId detected, staying in create mode');
+      setIsSessionMode(false);
+    };
+
+    checkForMeetPointId();
+  }, [params]);
+
+  // Load session data when in session mode
+  useEffect(() => {
+    if (isSessionMode && sessionMeetPointId) {
+      loadSessionMeetPoint(sessionMeetPointId);
+    }
+  }, [isSessionMode, sessionMeetPointId]);
+
+  const loadSessionMeetPoint = async (meetPointId: string) => {
+    try {
+      setSessionLoading(true);
+      console.log('[MeetNow] Loading session meet point:', meetPointId);
+
+      // Fetch meet point from Supabase
+      const { data, error } = await supabase
+        .from('meet_points')
+        .select('*')
+        .eq('meet_point_id', meetPointId)
+        .single();
+
+      if (error || !data) {
+        console.error('[MeetNow] Error loading meet point:', error);
+        Alert.alert('Error', 'Meet Point not found', [
+          { text: 'OK', onPress: () => router.replace('/') }
+        ]);
+        setSessionLoading(false);
+        return;
+      }
+
+      console.log('[MeetNow] Meet point loaded:', data);
+      setSessionMeetPoint(data as MeetPoint);
+
+      // Check if we need to add this device's location
+      const meetPoint = data as MeetPoint;
+      if (!meetPoint.receiver_lat || !meetPoint.receiver_lng) {
+        console.log('[MeetNow] Receiver location not set, capturing current location...');
+        await captureAndUpdateReceiverLocation(meetPointId, meetPoint);
+      } else {
+        // Both locations are set, calculate midpoint and search places
+        await calculateAndSearchPlaces(meetPoint);
+      }
+
+      setSessionLoading(false);
+    } catch (error) {
+      console.error('[MeetNow] Error in loadSessionMeetPoint:', error);
+      Alert.alert('Error', 'Failed to load Meet Point');
+      setSessionLoading(false);
+    }
+  };
+
+  const captureAndUpdateReceiverLocation = async (meetPointId: string, meetPoint: MeetPoint) => {
+    try {
+      // Request location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Location Required', 'Please enable location access to join this Meet Point');
+        return;
+      }
+
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      console.log('[MeetNow] Captured receiver location:', location.coords);
+
+      // Mask coordinates if SafeMeet is on
+      let receiverLat = location.coords.latitude;
+      let receiverLng = location.coords.longitude;
+
+      if (meetPoint.safe) {
+        receiverLat = Math.round(receiverLat * 100) / 100;
+        receiverLng = Math.round(receiverLng * 100) / 100;
+        console.log('[MeetNow] Masked receiver coordinates for SafeMeet:', { receiverLat, receiverLng });
+      }
+
+      // Get receiver name from storage
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      let receiverName = 'User';
+      if (stored) {
+        const userData = JSON.parse(stored);
+        receiverName = userData?.name || 'User';
+      }
+
+      // Update meet point with receiver location
+      const { error } = await supabase
+        .from('meet_points')
+        .update({
+          receiver_lat: receiverLat,
+          receiver_lng: receiverLng,
+          receiver_name: receiverName,
+          status: 'joined',
+        })
+        .eq('meet_point_id', meetPointId);
+
+      if (error) {
+        console.error('[MeetNow] Error updating receiver location:', error);
+        Alert.alert('Error', 'Failed to update your location');
+        return;
+      }
+
+      console.log('[MeetNow] Receiver location updated successfully');
+
+      // Calculate midpoint and search places
+      const updatedMeetPoint = {
+        ...meetPoint,
+        receiver_lat: receiverLat,
+        receiver_lng: receiverLng,
+        receiver_name: receiverName,
+        status: 'joined' as const,
+      };
+
+      setSessionMeetPoint(updatedMeetPoint);
+      await calculateAndSearchPlaces(updatedMeetPoint);
+    } catch (error) {
+      console.error('[MeetNow] Error capturing receiver location:', error);
+      Alert.alert('Error', 'Failed to get your location');
+    }
+  };
+
+  const calculateAndSearchPlaces = async (meetPoint: MeetPoint) => {
+    try {
+      if (!meetPoint.receiver_lat || !meetPoint.receiver_lng) {
+        console.log('[MeetNow] Cannot calculate midpoint, receiver location missing');
+        return;
+      }
+
+      console.log('[MeetNow] Calculating midpoint and searching places...');
+
+      // Calculate midpoint
+      const { midLat, midLng } = calculateMidpoint(
+        meetPoint.sender_lat,
+        meetPoint.sender_lng,
+        meetPoint.receiver_lat,
+        meetPoint.receiver_lng,
+        meetPoint.safe
+      );
+
+      console.log('[MeetNow] Midpoint calculated:', { midLat, midLng });
+
+      // Reverse geocode midpoint
+      try {
+        const results = await Location.reverseGeocodeAsync({ 
+          latitude: midLat, 
+          longitude: midLng 
+        });
+        if (results && results.length > 0) {
+          const address = results[0];
+          const parts = [
+            address?.streetNumber,
+            address?.street,
+            address?.city,
+            address?.region,
+            address?.postalCode,
+          ].filter(Boolean);
+          const formattedAddress = parts.join(', ');
+          console.log('[MeetNow] Midpoint address:', formattedAddress);
+          setMidpointAddress(formattedAddress || null);
+        }
+      } catch (error) {
+        console.error('[MeetNow] Error reverse geocoding:', error);
+      }
+
+      // Search for nearby places
+      const places = await searchNearbyPlaces(midLat, midLng, meetPoint.type);
+      console.log('[MeetNow] Found places:', places.length);
+      setSessionPlaces(places);
+
+      // Update meet point in Supabase with midpoint and results
+      const { error } = await supabase
+        .from('meet_points')
+        .update({
+          midpoint_lat: midLat,
+          midpoint_lng: midLng,
+          hotspot_results: places,
+          status: 'ready',
+          selected_place_id: places.length > 0 ? places[0].id : null,
+          selected_place_name: places.length > 0 ? places[0].name : null,
+          selected_place_lat: places.length > 0 ? places[0].latitude : null,
+          selected_place_lng: places.length > 0 ? places[0].longitude : null,
+          selected_place_address: places.length > 0 ? places[0].address : null,
+        })
+        .eq('meet_point_id', meetPoint.meet_point_id);
+
+      if (error) {
+        console.error('[MeetNow] Error updating meet point with results:', error);
+      } else {
+        console.log('[MeetNow] Meet point updated with results');
+        // Reload to get updated data
+        const { data } = await supabase
+          .from('meet_points')
+          .select('*')
+          .eq('meet_point_id', meetPoint.meet_point_id)
+          .single();
+        if (data) {
+          setSessionMeetPoint(data as MeetPoint);
+        }
+      }
+    } catch (error) {
+      console.error('[MeetNow] Error in calculateAndSearchPlaces:', error);
+      Alert.alert('Error', 'Failed to calculate midpoint and search places');
+    }
+  };
 
   const loadUserName = async () => {
     try {
@@ -207,8 +468,11 @@ export default function MeetNowScreen() {
   }, [isSafeMode]);
 
   useEffect(() => {
-    loadUserName();
-    getCurrentLocation();
+    // Only load user name and location if NOT in session mode
+    if (!isSessionMode) {
+      loadUserName();
+      getCurrentLocation();
+    }
 
     return () => {
       if (channelRef.current) {
@@ -216,7 +480,7 @@ export default function MeetNowScreen() {
         channelRef.current = null;
       }
     };
-  }, [getCurrentLocation]);
+  }, [getCurrentLocation, isSessionMode]);
 
   const subscribeToMeetPoint = (meetPointId: string) => {
     // Check if already subscribed
@@ -411,10 +675,8 @@ export default function MeetNowScreen() {
       // Subscribe to real-time updates
       subscribeToMeetPoint(meetPointId);
 
-      // Generate proper deep link using root path with query parameter
+      // Generate share URL with /meet-now path
       const shareUrl = generateShareUrl(meetPointId);
-
-      console.log('Generated share URL:', shareUrl);
 
       // Build share message
       const shareMessage = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
@@ -522,6 +784,71 @@ export default function MeetNowScreen() {
     }
   };
 
+  const handleSelectPlace = async (place: Place) => {
+    if (!sessionMeetPoint) {
+      return;
+    }
+
+    console.log('[MeetNow] Selecting place:', place.name);
+
+    try {
+      const { error } = await supabase
+        .from('meet_points')
+        .update({
+          selected_place_id: place.id,
+          selected_place_name: place.name,
+          selected_place_lat: place.latitude,
+          selected_place_lng: place.longitude,
+          selected_place_address: place.address,
+        })
+        .eq('meet_point_id', sessionMeetPoint.meet_point_id);
+
+      if (error) {
+        console.error('[MeetNow] Error updating selected place:', error);
+        Alert.alert('Error', 'Failed to update selected place');
+        return;
+      }
+
+      // Update local state
+      setSessionMeetPoint({
+        ...sessionMeetPoint,
+        selected_place_id: place.id,
+        selected_place_name: place.name,
+        selected_place_lat: place.latitude,
+        selected_place_lng: place.longitude,
+        selected_place_address: place.address,
+      });
+
+      console.log('[MeetNow] Selected place updated successfully');
+    } catch (error) {
+      console.error('[MeetNow] Error selecting place:', error);
+      Alert.alert('Error', 'Failed to update selected place');
+    }
+  };
+
+  const handleGetDirections = (place?: Place) => {
+    const targetPlace = place || (sessionMeetPoint?.selected_place_lat && sessionMeetPoint?.selected_place_lng 
+      ? {
+          latitude: sessionMeetPoint.selected_place_lat,
+          longitude: sessionMeetPoint.selected_place_lng,
+          name: sessionMeetPoint.selected_place_name || 'Selected Place',
+        }
+      : null);
+
+    if (!targetPlace) {
+      Alert.alert('Error', 'No location selected');
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${targetPlace.latitude},${targetPlace.longitude}`;
+    console.log('[MeetNow] Opening directions to:', targetPlace.name || 'location');
+
+    Linking.openURL(url).catch((err) => {
+      console.error('[MeetNow] Error opening maps:', err);
+      Alert.alert('Error', 'Failed to open maps');
+    });
+  };
+
   const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
     <TouchableOpacity
       key={item?.id}
@@ -543,6 +870,183 @@ export default function MeetNowScreen() {
     </TouchableOpacity>
   );
 
+  const renderSessionPlaceItem = ({ item, index }: { item: Place; index: number }) => {
+    const isSelected = sessionMeetPoint?.selected_place_id === item.id;
+
+    return (
+      <View
+        key={item?.id || `place-${index}`}
+        style={[
+          styles.sessionPlaceCard,
+          { 
+            backgroundColor: colors.card, 
+            borderColor: isSelected ? colors.primary : colors.border,
+            borderWidth: isSelected ? 3 : 1,
+          }
+        ]}
+      >
+        {isSelected && (
+          <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
+            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.selectedBadgeText}>Selected</Text>
+          </View>
+        )}
+        <View style={styles.placeHeader}>
+          <View style={styles.placeRank}>
+            <Text style={[styles.placeRankText, { color: colors.primary }]}>#{index + 1}</Text>
+          </View>
+          <View style={styles.placeInfo}>
+            <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
+              {item?.name || 'Unknown Place'}
+            </Text>
+            <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+              {item?.address || 'Address not available'}
+            </Text>
+            <View style={styles.placeMetrics}>
+              {item?.rating > 0 && (
+                <View style={styles.ratingContainer}>
+                  <MaterialIcons name="star" size={16} color="#FFC107" />
+                  <Text style={[styles.ratingText, { color: colors.text }]}>
+                    {item.rating.toFixed(1)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.distanceContainer}>
+                <MaterialIcons name="place" size={16} color={colors.textSecondary} />
+                <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
+                  {item?.distance?.toFixed(1) || '0.0'} km
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.directionsButton, { backgroundColor: colors.primary }]}
+          onPress={() => handleGetDirections(item)}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="directions" size={20} color="#FFFFFF" />
+          <Text style={styles.directionsButtonText}>Get Directions</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render session view mode
+  if (isSessionMode) {
+    if (sessionLoading) {
+      return (
+        <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading Meet Point...</Text>
+        </View>
+      );
+    }
+
+    if (!sessionMeetPoint) {
+      return (
+        <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+          <MaterialIcons name="error-outline" size={64} color={colors.error} />
+          <Text style={[styles.errorText, { color: colors.text }]}>Meet Point not found</Text>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.replace('/')}
+          >
+            <Text style={styles.backButtonText}>Go Home</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Show waiting state if not ready
+    if (sessionMeetPoint.status !== 'ready') {
+      return (
+        <View style={[styles.waitingContainer, { backgroundColor: colors.background }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.waitingTitle, { color: colors.text }]}>
+            {sessionMeetPoint.status === 'link_sent'
+              ? 'Waiting for the other person to join...'
+              : 'Calculating midpoint...'}
+          </Text>
+          <Text style={[styles.waitingSubtitle, { color: colors.textSecondary }]}>
+            This will update automatically when ready
+          </Text>
+        </View>
+      );
+    }
+
+    // Render session view
+    return (
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={[styles.successBanner, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+          <MaterialIcons name="check-circle" size={32} color={colors.success} />
+          <Text style={[styles.successText, { color: colors.success }]}>
+            Your Meet Point is ready!
+          </Text>
+        </View>
+
+        <Text style={[styles.title, { color: colors.text }]}>Meet Point Session</Text>
+
+        {/* Midpoint Info */}
+        <View style={[styles.midpointCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.midpointHeader}>
+            <MaterialIcons name="place" size={32} color={colors.primary} />
+            <Text style={[styles.midpointTitle, { color: colors.text }]}>Midpoint Location</Text>
+          </View>
+
+          {midpointAddress && (
+            <Text style={[styles.midpointAddress, { color: colors.text }]} numberOfLines={2}>
+              {midpointAddress}
+            </Text>
+          )}
+
+          <Text style={[styles.midpointCoords, { color: colors.textSecondary }]}>
+            {sessionMeetPoint.midpoint_lat?.toFixed(4)}, {sessionMeetPoint.midpoint_lng?.toFixed(4)}
+          </Text>
+        </View>
+
+        {/* Map Placeholder */}
+        <View style={[styles.mapPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <MaterialIcons name="map" size={48} color={colors.textSecondary} />
+          <Text style={[styles.mapPlaceholderText, { color: colors.textSecondary }]}>
+            Map view with markers for both users and the midpoint
+          </Text>
+          <Text style={[styles.mapPlaceholderSubtext, { color: colors.textSecondary }]}>
+            (react-native-maps not supported in Natively)
+          </Text>
+        </View>
+
+        {/* Suggested Places */}
+        <View style={styles.placesSection}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Suggested Places ({sessionPlaces.length})
+          </Text>
+
+          {sessionPlaces.length > 0 ? (
+            <FlatList
+              data={sessionPlaces}
+              renderItem={renderSessionPlaceItem}
+              keyExtractor={(item, index) => item?.id || `place-${index}`}
+              scrollEnabled={false}
+              contentContainerStyle={styles.placesList}
+            />
+          ) : (
+            <View style={[styles.noPlacesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <MaterialIcons name="info-outline" size={48} color={colors.textSecondary} />
+              <Text style={[styles.noPlacesText, { color: colors.textSecondary }]}>
+                No places found near the midpoint
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // Render create mode (original UI)
   const selectedMeetupTypeLabel = MEETUP_TYPES.find(t => t?.id === selectedMeetupType)?.label;
 
   return (
@@ -842,6 +1346,68 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 120,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  backButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  waitingTitle: {
+    marginTop: 24,
+    fontSize: 20,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  waitingSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 24,
+  },
+  successText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
   safeModeIndicator: {
     padding: 16,
     borderRadius: 12,
@@ -1071,11 +1637,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   meetSomeoneElseModal: {
     width: '90%',
     maxHeight: '80%',
@@ -1131,5 +1692,159 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Session view styles
+  midpointCard: {
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  midpointHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  midpointTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  midpointAddress: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  midpointCoords: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
+  mapPlaceholder: {
+    padding: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    minHeight: 200,
+  },
+  mapPlaceholderText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  mapPlaceholderSubtext: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  placesSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  placesList: {
+    gap: 12,
+  },
+  sessionPlaceCard: {
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  selectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  selectedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  placeHeader: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  placeRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(63, 81, 181, 0.1)',
+  },
+  placeRankText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  placeInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  placeName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  placeAddress: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  placeMetrics: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 4,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  distanceText: {
+    fontSize: 14,
+  },
+  directionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+  },
+  directionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  noPlacesCard: {
+    padding: 32,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  noPlacesText: {
+    marginTop: 12,
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
