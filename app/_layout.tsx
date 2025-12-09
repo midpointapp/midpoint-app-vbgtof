@@ -1,12 +1,12 @@
 
 import "react-native-reanimated";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useColorScheme, Alert } from "react-native";
+import { useColorScheme, Alert, Platform } from "react-native";
 import { useNetworkState } from "expo-network";
 import * as Linking from "expo-linking";
 import {
@@ -27,9 +27,12 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const networkState = useNetworkState();
+  const router = useRouter();
+  const segments = useSegments();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+  const [initialUrlProcessed, setInitialUrlProcessed] = useState(false);
 
   useEffect(() => {
     if (loaded) {
@@ -49,44 +52,65 @@ export default function RootLayout() {
     }
   }, [networkState.isConnected, networkState.isInternetReachable]);
 
-  // Handle deep links
+  // Handle deep links with meetPointId query parameter
   useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
-      const url = event?.url;
+    const handleDeepLink = (url: string) => {
       if (!url) return;
 
       console.log("Deep link received:", url);
       
       try {
+        // Parse the URL to extract query parameters
         const parsed = Linking.parse(url);
         console.log("Parsed deep link:", parsed);
         
-        // The routing will be handled automatically by expo-router
-        // based on the URL path
+        // Check for meetPointId in query parameters
+        const meetPointId = parsed.queryParams?.meetPointId as string | undefined;
+        
+        if (meetPointId) {
+          console.log("MeetPoint ID found in URL:", meetPointId);
+          
+          // Navigate to the meet screen with the meetPointId
+          // Use a small delay to ensure navigation is ready
+          setTimeout(() => {
+            router.push({
+              pathname: '/meet',
+              params: { meetPointId },
+            });
+          }, 100);
+        }
       } catch (error) {
         console.error("Error parsing deep link:", error);
       }
     };
 
-    // Listen for deep links when app is already open
-    const subscription = Linking.addEventListener("url", handleDeepLink);
-
     // Handle initial URL if app was opened via deep link
-    Linking.getInitialURL()
-      .then((url) => {
-        if (url) {
-          console.log("Initial URL:", url);
-          handleDeepLink({ url });
-        }
-      })
-      .catch((error) => {
-        console.error("Error getting initial URL:", error);
-      });
+    if (!initialUrlProcessed) {
+      Linking.getInitialURL()
+        .then((url) => {
+          if (url) {
+            console.log("Initial URL:", url);
+            handleDeepLink(url);
+          }
+          setInitialUrlProcessed(true);
+        })
+        .catch((error) => {
+          console.error("Error getting initial URL:", error);
+          setInitialUrlProcessed(true);
+        });
+    }
+
+    // Listen for deep links when app is already open
+    const subscription = Linking.addEventListener("url", (event) => {
+      if (event?.url) {
+        handleDeepLink(event.url);
+      }
+    });
 
     return () => {
       subscription?.remove();
     };
-  }, []);
+  }, [initialUrlProcessed, router]);
 
   if (!loaded) {
     return null;

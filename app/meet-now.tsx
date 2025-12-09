@@ -22,7 +22,7 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { DOWNLOAD_LINK } from '@/constants/config';
+import { generateShareUrl } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/app/integrations/supabase/client';
 import { generateId } from '@/utils/idGenerator';
@@ -411,8 +411,8 @@ export default function MeetNowScreen() {
       // Subscribe to real-time updates
       subscribeToMeetPoint(meetPointId);
 
-      // Generate proper deep link
-      const shareUrl = `${DOWNLOAD_LINK}/meet?meetPointId=${meetPointId}`;
+      // Generate proper deep link using root path with query parameter
+      const shareUrl = generateShareUrl(meetPointId);
 
       console.log('Generated share URL:', shareUrl);
 
