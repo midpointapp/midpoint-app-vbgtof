@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -12,26 +12,30 @@ import {
   Modal,
   FlatList,
   KeyboardAvoidingView,
-  ActivityIndicator
+  ActivityIndicator,
+  Share
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
-import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { calculateMidpoint, searchNearbyPlaces, Place, maskCoordinates } from '@/utils/locationUtils';
 import { DOWNLOAD_LINK } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/app/integrations/supabase/client';
+import { v4 as uuidv4 } from 'uuid';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const USER_STORAGE_KEY = '@midpoint_user';
 
+// Fixed dropdown ordering as requested
 const MEETUP_TYPES = [
   { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
-  { id: 'restaurant', label: 'Restaurants/Coffee shops', icon: 'restaurant' as const },
-  { id: 'police', label: 'Police stations', icon: 'local-police' as const },
-  { id: 'rest', label: 'Rest areas', icon: 'hotel' as const },
-  { id: 'public', label: 'Other safe public places', icon: 'place' as const },
+  { id: 'restaurant', label: 'Food & Coffee', icon: 'restaurant' as const },
+  { id: 'cafe', label: 'Coffee shops', icon: 'local-cafe' as const },
+  { id: 'shopping_mall', label: 'Shopping', icon: 'shopping-cart' as const },
+  { id: 'park', label: 'Parks', icon: 'park' as const },
+  { id: 'point_of_interest', label: 'Other', icon: 'place' as const },
 ];
 
 interface SavedContact {
@@ -39,8 +43,6 @@ interface SavedContact {
   name: string;
   initials: string;
   phoneNumber?: string;
-  lat?: number;
-  lng?: number;
 }
 
 interface LocationWithAddress {
@@ -49,11 +51,30 @@ interface LocationWithAddress {
   address?: string;
 }
 
+interface MeetPoint {
+  id: string;
+  meet_point_id: string;
+  sender_name: string;
+  sender_lat: number;
+  sender_lng: number;
+  receiver_lat: number | null;
+  receiver_lng: number | null;
+  type: string;
+  safe: boolean;
+  status: 'link_sent' | 'joined' | 'ready';
+  midpoint_lat: number | null;
+  midpoint_lng: number | null;
+  hotspot_results: any | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function MeetNowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const colors = useThemeColors();
   const isSafeMode = params?.safeMode === 'true';
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const [currentUserName, setCurrentUserName] = useState('User');
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
@@ -62,10 +83,9 @@ export default function MeetNowScreen() {
   const [myLocation, setMyLocation] = useState<LocationWithAddress | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [showResultModal, setShowResultModal] = useState(false);
-  const [searchingPlaces, setSearchingPlaces] = useState(false);
-  const [midpointCoords, setMidpointCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [creatingMeetPoint, setCreatingMeetPoint] = useState(false);
+  const [currentMeetPoint, setCurrentMeetPoint] = useState<MeetPoint | null>(null);
+  const [showReadyBanner, setShowReadyBanner] = useState(false);
 
   const loadUserName = async () => {
     try {
@@ -163,7 +183,63 @@ export default function MeetNowScreen() {
   useEffect(() => {
     loadUserName();
     getCurrentLocation();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [getCurrentLocation]);
+
+  const subscribeToMeetPoint = (meetPointId: string) => {
+    // Check if already subscribed
+    if (channelRef.current?.state === 'subscribed') {
+      console.log('Already subscribed to MeetPoint channel');
+      return;
+    }
+
+    console.log('Subscribing to MeetPoint updates:', meetPointId);
+
+    const channel = supabase
+      .channel(`meetpoint:${meetPointId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'meet_points',
+          filter: `meet_point_id=eq.${meetPointId}`,
+        },
+        (payload) => {
+          console.log('MeetPoint updated:', payload);
+          if (payload.new) {
+            const updatedMeetPoint = payload.new as MeetPoint;
+            setCurrentMeetPoint(updatedMeetPoint);
+
+            // Show banner when status changes to joined or ready
+            if (updatedMeetPoint.status === 'joined' || updatedMeetPoint.status === 'ready') {
+              setShowReadyBanner(true);
+            }
+
+            // Navigate to results when ready
+            if (updatedMeetPoint.status === 'ready') {
+              setTimeout(() => {
+                router.push({
+                  pathname: '/midpoint-results',
+                  params: { meetPointId },
+                });
+              }, 2000);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    channelRef.current = channel;
+  };
 
   const handlePickFromContacts = async () => {
     try {
@@ -182,15 +258,11 @@ export default function MeetNowScreen() {
             ? contact.phoneNumbers[0]?.number 
             : undefined;
           
-          // Demo coordinates: Generate random location near San Francisco Bay Area
-          // In a real app, this would come from the contact's stored location or their device
           const newContact: SavedContact = {
             id: contact?.id || Date.now().toString(),
             name: fullName,
             initials: initials,
             phoneNumber: phoneNumber,
-            lat: 37.8044 + (Math.random() - 0.5) * 0.1,
-            lng: -122.2712 + (Math.random() - 0.5) * 0.1,
           };
           
           setSelectedContact(newContact);
@@ -209,237 +281,109 @@ export default function MeetNowScreen() {
     }
   };
 
-  const handleSendInviteSMS = async () => {
+  const handleCreateAndShareMeetPoint = async () => {
     if (!selectedContact) {
       Alert.alert('No Contact Selected', 'Please select a contact first.');
       return;
     }
 
-    if (!selectedContact.phoneNumber) {
-      Alert.alert(
-        'No Phone Number',
-        'This contact does not have a phone number. Please select a different contact or add their phone number.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     if (!myLocation) {
-      Alert.alert('Location Required', 'Please wait for your location to be obtained before sending an invite.');
+      Alert.alert('Location Required', 'Please wait for your location to be obtained before creating a Meet Point.');
       return;
     }
 
     if (!selectedMeetupType) {
-      Alert.alert('Meetup Type Required', 'Please select a meetup type before sending an invite.');
+      Alert.alert('Meetup Type Required', 'Please select a meetup type before creating a Meet Point.');
       return;
     }
 
     try {
-      const isAvailable = await SMS.isAvailableAsync();
-      
-      if (!isAvailable) {
-        Alert.alert(
-          'SMS Not Available',
-          'SMS is not available on this device. You can manually share the download link:\n\n' + DOWNLOAD_LINK,
-          [
-            { text: 'Copy Link', onPress: () => console.log('Link copied to clipboard') },
-            { text: 'Close' }
-          ]
-        );
-        return;
-      }
+      setCreatingMeetPoint(true);
 
-      // Get coordinates (masked if SafeMeet is on)
-      let lat = myLocation.latitude;
-      let lng = myLocation.longitude;
+      // Generate unique meetPointId
+      const meetPointId = uuidv4();
+
+      console.log('Creating MeetPoint:', {
+        meetPointId,
+        senderName: currentUserName,
+        type: selectedMeetupType,
+        safe: isSafeMode,
+      });
+
+      // Mask coordinates if SafeMeet is on
+      let senderLat = myLocation.latitude;
+      let senderLng = myLocation.longitude;
 
       if (isSafeMode) {
-        const masked = maskCoordinates(lat, lng);
-        lat = masked.lat;
-        lng = masked.lng;
-        console.log('Masked coordinates for SafeMeet:', masked);
+        senderLat = Math.round(senderLat * 100) / 100;
+        senderLng = Math.round(senderLng * 100) / 100;
+        console.log('Masked coordinates for SafeMeet:', { senderLat, senderLng });
       }
 
-      // Build invite URL with all parameters
-      const inviteUrl = `${DOWNLOAD_LINK}/invite?inviterName=${encodeURIComponent(currentUserName)}&lat=${lat}&lng=${lng}&type=${encodeURIComponent(selectedMeetupType)}&safe=${isSafeMode}`;
+      // Create MeetPoint in Supabase
+      const { data, error } = await supabase
+        .from('meet_points')
+        .insert([
+          {
+            meet_point_id: meetPointId,
+            sender_name: currentUserName,
+            sender_lat: senderLat,
+            sender_lng: senderLng,
+            type: selectedMeetupType,
+            safe: isSafeMode,
+            status: 'link_sent',
+          },
+        ])
+        .select()
+        .single();
 
-      console.log('Generated invite URL:', inviteUrl);
-
-      // Build SMS message
-      const message = `Hey! I'd like to meet you halfway. Download the MidPoint app and tap this link to share your location and find our meeting spot:\n\n${inviteUrl}`;
-      
-      const { result } = await SMS.sendSMSAsync(
-        [selectedContact.phoneNumber],
-        message
-      );
-
-      console.log('SMS result:', result);
-      
-      if (result === 'sent') {
-        Alert.alert('Success', 'Invite sent successfully!');
-      } else if (result === 'cancelled') {
-        console.log('User cancelled SMS');
-      }
-    } catch (error) {
-      console.error('Error sending SMS:', error);
-      Alert.alert(
-        'Error',
-        'Failed to send SMS. You can manually share the download link:\n\n' + DOWNLOAD_LINK,
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const handleFindMidpoint = async () => {
-    if (!myLocation) {
-      Alert.alert(
-        'Location Required',
-        'Both users must enable location to compute a midpoint. Please enable location services.',
-        [
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          { text: 'Retry', onPress: getCurrentLocation },
-          { text: 'Cancel' }
-        ]
-      );
-      return;
-    }
-
-    if (!selectedContact) {
-      Alert.alert('No Contact Selected', 'Please select a contact to meet with.');
-      return;
-    }
-
-    if (!selectedContact.lat || !selectedContact.lng) {
-      Alert.alert(
-        'Contact Location Missing',
-        'The selected contact does not have a location set. Both users must enable location to compute a midpoint.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    if (!selectedMeetupType) {
-      Alert.alert('No Meetup Type Selected', 'Please select a meetup type.');
-      return;
-    }
-
-    try {
-      setSearchingPlaces(true);
-      setPlaces([]);
-
-      // Calculate midpoint
-      const { midLat, midLng } = calculateMidpoint(
-        myLocation.latitude,
-        myLocation.longitude,
-        selectedContact.lat,
-        selectedContact.lng,
-        isSafeMode
-      );
-
-      setMidpointCoords({ lat: midLat, lng: midLng });
-
-      console.log('Searching for places near midpoint:', { midLat, midLng, meetupType: selectedMeetupType });
-
-      // Search for nearby places using Google Places API
-      const foundPlaces = await searchNearbyPlaces(midLat, midLng, selectedMeetupType);
-
-      console.log(`Found ${foundPlaces?.length || 0} places`);
-
-      if (!foundPlaces || foundPlaces.length === 0) {
-        Alert.alert(
-          'No Places Found',
-          'No places found near the midpoint. Try selecting a different meetup type or expanding your search area.',
-          [{ text: 'OK' }]
-        );
-        setSearchingPlaces(false);
+      if (error) {
+        console.error('Error creating MeetPoint:', error);
+        Alert.alert('Error', 'Failed to create Meet Point. Please try again.');
+        setCreatingMeetPoint(false);
         return;
       }
 
-      setPlaces(foundPlaces);
-      setShowResultModal(true);
-      setSearchingPlaces(false);
-    } catch (error: any) {
-      console.error('Error finding midpoint:', error);
-      setSearchingPlaces(false);
-      
-      let errorMessage = 'Failed to find places. Please try again.';
-      
-      if (error?.message) {
-        if (error.message.includes('API key not configured')) {
-          errorMessage = 'Google Places API key not configured. Please add your API key in constants/config.ts to use this feature.';
-        } else if (error.message.includes('API request denied')) {
-          errorMessage = 'Google Places API access denied. Please check your API key and ensure billing is enabled.';
-        } else if (error.message.includes('Network')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        } else {
-          errorMessage = error.message;
-        }
+      console.log('MeetPoint created successfully:', data);
+      setCurrentMeetPoint(data as MeetPoint);
+
+      // Subscribe to real-time updates
+      subscribeToMeetPoint(meetPointId);
+
+      // Generate share link
+      const shareUrl = `${DOWNLOAD_LINK}/meet?meetPointId=${meetPointId}`;
+
+      console.log('Generated share URL:', shareUrl);
+
+      // Share the link
+      const shareMessage = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
+
+      const shareResult = await Share.share({
+        message: shareMessage,
+        title: 'MidPoint Meet Invite',
+      });
+
+      console.log('Share result:', shareResult);
+
+      setCreatingMeetPoint(false);
+
+      if (shareResult.action === Share.sharedAction) {
+        Alert.alert(
+          'Invite Sent!',
+          'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
+          [{ text: 'OK' }]
+        );
       }
-      
-      Alert.alert('Error', errorMessage, [{ text: 'OK' }]);
+    } catch (error: any) {
+      console.error('Error creating and sharing MeetPoint:', error);
+      setCreatingMeetPoint(false);
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to create Meet Point. Please try again.',
+        [{ text: 'OK' }]
+      );
     }
   };
-
-  const handleOpenInMaps = (place: Place) => {
-    if (!place) {
-      Alert.alert('Error', 'Invalid place data');
-      return;
-    }
-
-    const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place?.placeId || ''}`;
-    
-    console.log('Opening maps for place:', place.name);
-    
-    Linking.openURL(url).catch((err) => {
-      console.error('Error opening maps:', err);
-      Alert.alert('Error', 'Failed to open maps. Please try again.');
-    });
-  };
-
-  const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => (
-    <View 
-      key={item?.id || `place-${index}`}
-      style={[styles.placeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      <View style={styles.placeHeader}>
-        <View style={styles.placeRank}>
-          <Text style={[styles.placeRankText, { color: colors.primary }]}>#{index + 1}</Text>
-        </View>
-        <View style={styles.placeInfo}>
-          <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-            {item?.name || 'Unknown Place'}
-          </Text>
-          <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item?.address || 'Address not available'}
-          </Text>
-          <View style={styles.placeMetrics}>
-            {item?.rating > 0 && (
-              <View style={styles.ratingContainer}>
-                <MaterialIcons name="star" size={16} color="#FFC107" />
-                <Text style={[styles.ratingText, { color: colors.text }]}>
-                  {item.rating.toFixed(1)}
-                </Text>
-              </View>
-            )}
-            <View style={styles.distanceContainer}>
-              <MaterialIcons name="place" size={16} color={colors.textSecondary} />
-              <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
-                {item?.distance?.toFixed(1) || '0.0'} km
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      <TouchableOpacity
-        style={[styles.mapsButton, { backgroundColor: colors.primary }]}
-        onPress={() => handleOpenInMaps(item)}
-        activeOpacity={0.8}
-      >
-        <MaterialIcons name="map" size={20} color="#FFFFFF" />
-        <Text style={styles.mapsButtonText}>Open in Maps</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
     <TouchableOpacity
@@ -481,6 +425,24 @@ export default function MeetNowScreen() {
             </Text>
             <Text style={[styles.safeModeSubtext, { color: colors.textSecondary }]}>
               Your exact location will be hidden
+            </Text>
+          </View>
+        )}
+
+        {showReadyBanner && currentMeetPoint && (
+          <View style={[styles.readyBanner, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+            <MaterialIcons name="check-circle" size={24} color={colors.success} />
+            <Text style={[styles.readyBannerText, { color: colors.success }]}>
+              Your Meet Point is ready!
+            </Text>
+          </View>
+        )}
+
+        {currentMeetPoint && currentMeetPoint.status === 'link_sent' && (
+          <View style={[styles.waitingBanner, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.waitingBannerText, { color: colors.primary }]}>
+              Waiting for them to open your Meet Point...
             </Text>
           </View>
         )}
@@ -571,18 +533,6 @@ export default function MeetNowScreen() {
               </TouchableOpacity>
             </View>
           )}
-
-          {selectedContact && selectedContact.phoneNumber && (
-            <TouchableOpacity
-              style={[styles.inviteButton, { backgroundColor: colors.secondary }]}
-              onPress={handleSendInviteSMS}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.inviteButtonText}>
-                📲 Send Invite via SMS
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={styles.section}>
@@ -606,22 +556,22 @@ export default function MeetNowScreen() {
 
         <TouchableOpacity
           style={[
-            styles.findButton, 
+            styles.createButton, 
             { backgroundColor: colors.primary },
-            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || searchingPlaces) && styles.findButtonDisabled
+            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint) && styles.createButtonDisabled
           ]}
-          onPress={handleFindMidpoint}
+          onPress={handleCreateAndShareMeetPoint}
           activeOpacity={0.8}
-          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || searchingPlaces}
+          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint}
         >
-          {searchingPlaces ? (
+          {creatingMeetPoint ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator color="#FFFFFF" size="small" />
-              <Text style={styles.findButtonText}>Searching...</Text>
+              <Text style={styles.createButtonText}>Creating...</Text>
             </View>
           ) : (
-            <Text style={styles.findButtonText}>
-              {isSafeMode ? 'SafeMeet — Hide My Address' : 'Find the MidPoint'}
+            <Text style={styles.createButtonText}>
+              {isSafeMode ? 'Create Safe Meet Point' : 'Create Meet Point'}
             </Text>
           )}
         </TouchableOpacity>
@@ -654,63 +604,6 @@ export default function MeetNowScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-
-      <Modal
-        visible={showResultModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowResultModal(false)}
-      >
-        <View style={styles.resultModalOverlay}>
-          <TouchableOpacity 
-            style={styles.resultModalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowResultModal(false)}
-          />
-          <View style={[styles.resultBottomSheet, { backgroundColor: colors.card }]}>
-            <View style={[styles.resultHandle, { backgroundColor: colors.border }]} />
-            
-            <View style={styles.resultContent}>
-              <View style={[styles.resultIconContainer, { backgroundColor: colors.success + '20' }]}>
-                <MaterialIcons name="check-circle" size={48} color={colors.success} />
-              </View>
-              
-              <Text style={[styles.resultTitle, { color: colors.text }]}>
-                {places?.length || 0} Place{places?.length !== 1 ? 's' : ''} Found!
-              </Text>
-              
-              {selectedContact && (
-                <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
-                  Meeting with {selectedContact?.name || 'Unknown'}
-                </Text>
-              )}
-
-              {midpointCoords && (
-                <Text style={[styles.midpointCoords, { color: colors.textSecondary }]}>
-                  Midpoint: {midpointCoords.lat.toFixed(4)}, {midpointCoords.lng.toFixed(4)}
-                </Text>
-              )}
-
-              <FlatList
-                data={places}
-                renderItem={renderPlaceItem}
-                keyExtractor={(item, index) => item?.id || `place-${index}`}
-                style={styles.placesList}
-                contentContainerStyle={styles.placesListContent}
-                showsVerticalScrollIndicator={true}
-              />
-
-              <TouchableOpacity
-                style={[styles.closeButton, { borderColor: colors.border }]}
-                onPress={() => setShowResultModal(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -737,6 +630,32 @@ const styles = StyleSheet.create({
   },
   safeModeSubtext: {
     fontSize: 14,
+  },
+  readyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+  },
+  readyBannerText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  waitingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    marginBottom: 16,
+  },
+  waitingBannerText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   title: {
     fontSize: 28,
@@ -856,19 +775,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  inviteButton: {
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    boxShadow: '0px 4px 12px rgba(233, 30, 99, 0.3)',
-    elevation: 4,
-  },
-  inviteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -920,7 +826,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
   },
-  findButton: {
+  createButton: {
     borderRadius: 16,
     paddingVertical: 18,
     paddingHorizontal: 32,
@@ -930,10 +836,10 @@ const styles = StyleSheet.create({
     boxShadow: '0px 4px 12px rgba(63, 81, 181, 0.3)',
     elevation: 4,
   },
-  findButtonDisabled: {
+  createButtonDisabled: {
     opacity: 0.5,
   },
-  findButtonText: {
+  createButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
@@ -943,145 +849,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  resultModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  resultModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  resultBottomSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 40,
-    maxHeight: '80%',
-    boxShadow: '0px -4px 20px rgba(0, 0, 0, 0.15)',
-    elevation: 10,
-  },
-  resultHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
-  },
-  resultContent: {
-    paddingHorizontal: 24,
-  },
-  resultIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  resultTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  resultSubtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  midpointCoords: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  placesList: {
-    maxHeight: 400,
-  },
-  placesListContent: {
-    paddingBottom: 16,
-  },
-  placeCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-    gap: 12,
-  },
-  placeHeader: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  placeRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(63, 81, 181, 0.1)',
-  },
-  placeRankText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  placeInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  placeName: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  placeAddress: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  placeMetrics: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  distanceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  distanceText: {
-    fontSize: 14,
-  },
-  mapsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 8,
-  },
-  mapsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  closeButton: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

@@ -127,7 +127,16 @@ export function getGooglePlacesType(meetupType: string): { type?: string; keywor
     case 'gas':
       return { type: 'gas_station' };
     case 'restaurant':
-      return { type: 'restaurant', keyword: 'coffee' };
+      return { type: 'restaurant' };
+    case 'cafe':
+      return { type: 'cafe' };
+    case 'shopping_mall':
+      return { type: 'shopping_mall' };
+    case 'park':
+      return { type: 'park' };
+    case 'point_of_interest':
+      return { type: 'point_of_interest' };
+    // Legacy support
     case 'police':
       return { type: 'police' };
     case 'rest':
