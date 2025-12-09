@@ -672,6 +672,13 @@ export default function MeetNowScreen() {
       console.log('MeetPoint created successfully:', data);
       setCurrentMeetPoint(data as MeetPoint);
 
+      // Validate meetPointId before proceeding
+      if (!meetPointId) {
+        alert("Error: missing meetPointId, cannot send invite.");
+        setCreatingMeetPoint(false);
+        return;
+      }
+
       // Subscribe to real-time updates
       subscribeToMeetPoint(meetPointId);
 
