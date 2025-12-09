@@ -677,6 +677,9 @@ export default function MeetNowScreen() {
 
       // Generate share URL with /meet-now path
       const shareUrl = generateShareUrl(meetPointId);
+      
+      // Log the final URL right before sending
+      console.log('[Invite] SMS link: ' + shareUrl);
 
       // Build share message
       const shareMessage = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
@@ -695,6 +698,9 @@ export default function MeetNowScreen() {
               text: 'Send SMS',
               onPress: async () => {
                 try {
+                  console.log('[Invite] Sending SMS to:', selectedContact.phoneNumber);
+                  console.log('[Invite] SMS link: ' + shareUrl);
+                  
                   const { result } = await SMS.sendSMSAsync(
                     [selectedContact.phoneNumber!],
                     shareMessage
@@ -720,6 +726,8 @@ export default function MeetNowScreen() {
               text: 'Share Link',
               onPress: async () => {
                 try {
+                  console.log('[Invite] Sharing link:', shareUrl);
+                  
                   const shareResult = await Share.share({
                     message: shareMessage,
                     title: 'MidPoint Meet Invite',
@@ -752,6 +760,8 @@ export default function MeetNowScreen() {
       } else {
         // Only Share Link option available
         try {
+          console.log('[Invite] Sharing link:', shareUrl);
+          
           const shareResult = await Share.share({
             message: shareMessage,
             title: 'MidPoint Meet Invite',
