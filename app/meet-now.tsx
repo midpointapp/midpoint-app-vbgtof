@@ -28,14 +28,25 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const USER_STORAGE_KEY = '@midpoint_user';
 
-// Fixed dropdown ordering as requested
-const MEETUP_TYPES = [
+// Dropdown ordering based on mode
+const MEETUP_TYPES_SAFE = [
+  { id: 'police', label: 'Police station', icon: 'local-police' as const },
   { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
-  { id: 'restaurant', label: 'Food & Coffee', icon: 'restaurant' as const },
-  { id: 'cafe', label: 'Coffee shops', icon: 'local-cafe' as const },
+  { id: 'restaurant', label: 'Food', icon: 'restaurant' as const },
+  { id: 'cafe', label: 'Coffee', icon: 'local-cafe' as const },
   { id: 'shopping_mall', label: 'Shopping', icon: 'shopping-cart' as const },
   { id: 'park', label: 'Parks', icon: 'park' as const },
   { id: 'point_of_interest', label: 'Other', icon: 'place' as const },
+];
+
+const MEETUP_TYPES_REGULAR = [
+  { id: 'restaurant', label: 'Food', icon: 'restaurant' as const },
+  { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
+  { id: 'cafe', label: 'Coffee', icon: 'local-cafe' as const },
+  { id: 'shopping_mall', label: 'Shopping', icon: 'shopping-cart' as const },
+  { id: 'park', label: 'Parks', icon: 'park' as const },
+  { id: 'point_of_interest', label: 'Other', icon: 'place' as const },
+  { id: 'police', label: 'Police station', icon: 'local-police' as const },
 ];
 
 interface SavedContact {
@@ -65,6 +76,11 @@ interface MeetPoint {
   midpoint_lat: number | null;
   midpoint_lng: number | null;
   hotspot_results: any | null;
+  selected_place_id: string | null;
+  selected_place_name: string | null;
+  selected_place_lat: number | null;
+  selected_place_lng: number | null;
+  selected_place_address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +102,9 @@ export default function MeetNowScreen() {
   const [creatingMeetPoint, setCreatingMeetPoint] = useState(false);
   const [currentMeetPoint, setCurrentMeetPoint] = useState<MeetPoint | null>(null);
   const [showReadyBanner, setShowReadyBanner] = useState(false);
+
+  // Select the appropriate dropdown list based on mode
+  const MEETUP_TYPES = isSafeMode ? MEETUP_TYPES_SAFE : MEETUP_TYPES_REGULAR;
 
   const loadUserName = async () => {
     try {

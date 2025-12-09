@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -24,6 +25,11 @@ export type Database = {
           midpoint_lat: number | null
           midpoint_lng: number | null
           hotspot_results: any | null
+          selected_place_id: string | null
+          selected_place_name: string | null
+          selected_place_lat: number | null
+          selected_place_lng: number | null
+          selected_place_address: string | null
           created_at: string
           updated_at: string
         }
@@ -41,6 +47,11 @@ export type Database = {
           midpoint_lat?: number | null
           midpoint_lng?: number | null
           hotspot_results?: any | null
+          selected_place_id?: string | null
+          selected_place_name?: string | null
+          selected_place_lat?: number | null
+          selected_place_lng?: number | null
+          selected_place_address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -58,6 +69,11 @@ export type Database = {
           midpoint_lat?: number | null
           midpoint_lng?: number | null
           hotspot_results?: any | null
+          selected_place_id?: string | null
+          selected_place_name?: string | null
+          selected_place_lat?: number | null
+          selected_place_lng?: number | null
+          selected_place_address?: string | null
           created_at?: string
           updated_at?: string
         }

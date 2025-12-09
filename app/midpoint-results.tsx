@@ -43,6 +43,11 @@ interface MeetPoint {
   midpoint_lat: number | null;
   midpoint_lng: number | null;
   hotspot_results: Place[] | null;
+  selected_place_id: string | null;
+  selected_place_name: string | null;
+  selected_place_lat: number | null;
+  selected_place_lng: number | null;
+  selected_place_address: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -173,15 +178,48 @@ export default function MidpointResultsScreen() {
     }
   };
 
-  const handleOpenInMaps = (place: Place) => {
-    if (!place) {
-      Alert.alert('Error', 'Invalid place data');
+  const handleSelectPlace = async (place: Place) => {
+    if (!meetPoint) {
       return;
     }
 
-    const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place.placeId || ''}`;
+    console.log('Selecting place as meet location:', place.name);
 
-    console.log('Opening maps for place:', place.name);
+    try {
+      // Update the selected place in Supabase
+      const { error } = await supabase
+        .from('meet_points')
+        .update({
+          selected_place_id: place.id,
+          selected_place_name: place.name,
+          selected_place_lat: place.latitude,
+          selected_place_lng: place.longitude,
+          selected_place_address: place.address,
+        })
+        .eq('meet_point_id', meetPointId);
+
+      if (error) {
+        console.error('Error updating selected place:', error);
+        Alert.alert('Error', 'Failed to update selected place. Please try again.');
+        return;
+      }
+
+      console.log('Selected place updated successfully');
+    } catch (error) {
+      console.error('Error selecting place:', error);
+      Alert.alert('Error', 'Failed to update selected place. Please try again.');
+    }
+  };
+
+  const handleGetDirections = () => {
+    if (!meetPoint?.selected_place_lat || !meetPoint?.selected_place_lng) {
+      Alert.alert('Error', 'No meeting location selected');
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${meetPoint.selected_place_lat},${meetPoint.selected_place_lng}&query_place_id=${meetPoint.selected_place_id || ''}`;
+
+    console.log('Opening directions to selected place:', meetPoint.selected_place_name);
 
     Linking.openURL(url).catch((err) => {
       console.error('Error opening maps:', err);
@@ -205,50 +243,81 @@ export default function MidpointResultsScreen() {
     });
   };
 
-  const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => (
-    <View
-      key={item?.id || `place-${index}`}
-      style={[styles.placeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      <View style={styles.placeHeader}>
-        <View style={styles.placeRank}>
-          <Text style={[styles.placeRankText, { color: colors.primary }]}>#{index + 1}</Text>
-        </View>
-        <View style={styles.placeInfo}>
-          <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-            {item?.name || 'Unknown Place'}
-          </Text>
-          <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item?.address || 'Address not available'}
-          </Text>
-          <View style={styles.placeMetrics}>
-            {item?.rating > 0 && (
-              <View style={styles.ratingContainer}>
-                <MaterialIcons name="star" size={16} color="#FFC107" />
-                <Text style={[styles.ratingText, { color: colors.text }]}>
-                  {item.rating.toFixed(1)}
+  const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => {
+    const isSelected = meetPoint?.selected_place_id === item.id;
+
+    return (
+      <View
+        key={item?.id || `place-${index}`}
+        style={[
+          styles.placeCard,
+          { 
+            backgroundColor: colors.card, 
+            borderColor: isSelected ? colors.primary : colors.border,
+            borderWidth: isSelected ? 3 : 1,
+          }
+        ]}
+      >
+        {isSelected && (
+          <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
+            <MaterialIcons name="check-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.selectedBadgeText}>Selected Meet Point</Text>
+          </View>
+        )}
+        <View style={styles.placeHeader}>
+          <View style={styles.placeRank}>
+            <Text style={[styles.placeRankText, { color: colors.primary }]}>#{index + 1}</Text>
+          </View>
+          <View style={styles.placeInfo}>
+            <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
+              {item?.name || 'Unknown Place'}
+            </Text>
+            <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+              {item?.address || 'Address not available'}
+            </Text>
+            <View style={styles.placeMetrics}>
+              {item?.rating > 0 && (
+                <View style={styles.ratingContainer}>
+                  <MaterialIcons name="star" size={16} color="#FFC107" />
+                  <Text style={[styles.ratingText, { color: colors.text }]}>
+                    {item.rating.toFixed(1)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.distanceContainer}>
+                <MaterialIcons name="place" size={16} color={colors.textSecondary} />
+                <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
+                  {item?.distance?.toFixed(1) || '0.0'} km
                 </Text>
               </View>
-            )}
-            <View style={styles.distanceContainer}>
-              <MaterialIcons name="place" size={16} color={colors.textSecondary} />
-              <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
-                {item?.distance?.toFixed(1) || '0.0'} km
-              </Text>
             </View>
           </View>
         </View>
+        <View style={styles.placeActions}>
+          {!isSelected && (
+            <TouchableOpacity
+              style={[styles.selectButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+              onPress={() => handleSelectPlace(item)}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="check" size={20} color="#FFFFFF" />
+              <Text style={styles.selectButtonText}>Set as Meet Point</Text>
+            </TouchableOpacity>
+          )}
+          {isSelected && (
+            <TouchableOpacity
+              style={[styles.directionsButton, { backgroundColor: colors.primary }]}
+              onPress={handleGetDirections}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="directions" size={20} color="#FFFFFF" />
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
-      <TouchableOpacity
-        style={[styles.mapsButton, { backgroundColor: colors.primary }]}
-        onPress={() => handleOpenInMaps(item)}
-        activeOpacity={0.8}
-      >
-        <MaterialIcons name="map" size={20} color="#FFFFFF" />
-        <Text style={styles.mapsButtonText}>Open in Maps</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -312,6 +381,35 @@ export default function MidpointResultsScreen() {
         <Text style={[styles.infoValue, { color: colors.text }]}>{meetPoint.sender_name}</Text>
       </View>
 
+      {meetPoint.selected_place_name && (
+        <View style={[styles.selectedPlaceCard, { backgroundColor: colors.primary + '15', borderColor: colors.primary }]}>
+          <View style={styles.selectedPlaceHeader}>
+            <MaterialIcons name="location-on" size={32} color={colors.primary} />
+            <View style={styles.selectedPlaceInfo}>
+              <Text style={[styles.selectedPlaceLabel, { color: colors.textSecondary }]}>
+                Current Meet Point
+              </Text>
+              <Text style={[styles.selectedPlaceName, { color: colors.text }]} numberOfLines={2}>
+                {meetPoint.selected_place_name}
+              </Text>
+              {meetPoint.selected_place_address && (
+                <Text style={[styles.selectedPlaceAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {meetPoint.selected_place_address}
+                </Text>
+              )}
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.mainDirectionsButton, { backgroundColor: colors.primary }]}
+            onPress={handleGetDirections}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="directions" size={24} color="#FFFFFF" />
+            <Text style={styles.mainDirectionsButtonText}>Get Directions</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={[styles.midpointCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.midpointHeader}>
           <MaterialIcons name="place" size={32} color={colors.primary} />
@@ -341,6 +439,9 @@ export default function MidpointResultsScreen() {
       <View style={styles.placesSection}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
           Recommended Places ({places.length})
+        </Text>
+        <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+          Tap &quot;Set as Meet Point&quot; to change the meeting location
         </Text>
 
         {places.length > 0 ? (
@@ -461,6 +562,49 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+  selectedPlaceCard: {
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 3,
+    marginBottom: 24,
+    gap: 16,
+  },
+  selectedPlaceHeader: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  selectedPlaceInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  selectedPlaceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  selectedPlaceName: {
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  selectedPlaceAddress: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  mainDirectionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderRadius: 10,
+  },
+  mainDirectionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
   midpointCard: {
     padding: 20,
     borderRadius: 12,
@@ -507,6 +651,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
     marginBottom: 16,
   },
   placesList: {
@@ -514,9 +662,25 @@ const styles = StyleSheet.create({
   },
   placeCard: {
     borderRadius: 12,
-    borderWidth: 1,
     padding: 16,
     gap: 12,
+  },
+  selectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  selectedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   placeHeader: {
     flexDirection: 'row',
@@ -568,7 +732,24 @@ const styles = StyleSheet.create({
   distanceText: {
     fontSize: 14,
   },
-  mapsButton: {
+  placeActions: {
+    gap: 8,
+  },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  selectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  directionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -576,7 +757,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  mapsButtonText: {
+  directionsButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',

@@ -100,7 +100,7 @@ export default function MeetPointHandler() {
         meetPoint.sender_lng,
         receiverLat,
         receiverLng,
-        false
+        meetPoint.safe
       );
 
       console.log('Midpoint calculated:', { midLat, midLng });
@@ -112,7 +112,21 @@ export default function MeetPointHandler() {
 
       console.log(`Found ${hotspots?.length || 0} hotspots`);
 
-      // Update the MeetPoint with receiver location, midpoint, hotspots, and status
+      // Set the first hotspot as the default selected place if available
+      let selectedPlaceData = {};
+      if (hotspots && hotspots.length > 0) {
+        const firstPlace = hotspots[0];
+        selectedPlaceData = {
+          selected_place_id: firstPlace.id,
+          selected_place_name: firstPlace.name,
+          selected_place_lat: firstPlace.latitude,
+          selected_place_lng: firstPlace.longitude,
+          selected_place_address: firstPlace.address,
+        };
+        console.log('Setting default selected place:', selectedPlaceData);
+      }
+
+      // Update the MeetPoint with receiver location, midpoint, hotspots, selected place, and status
       const { error: updateError } = await supabase
         .from('meet_points')
         .update({
@@ -121,6 +135,7 @@ export default function MeetPointHandler() {
           midpoint_lat: midLat,
           midpoint_lng: midLng,
           hotspot_results: hotspots,
+          ...selectedPlaceData,
           status: 'ready',
         })
         .eq('meet_point_id', meetPointId);

@@ -124,6 +124,8 @@ export function calculateDistance(
  */
 export function getGooglePlacesType(meetupType: string): { type?: string; keyword?: string } {
   switch (meetupType) {
+    case 'police':
+      return { type: 'police' };
     case 'gas':
       return { type: 'gas_station' };
     case 'restaurant':
@@ -137,8 +139,6 @@ export function getGooglePlacesType(meetupType: string): { type?: string; keywor
     case 'point_of_interest':
       return { type: 'point_of_interest' };
     // Legacy support
-    case 'police':
-      return { type: 'police' };
     case 'rest':
       return { keyword: 'rest area' };
     case 'public':
@@ -152,7 +152,7 @@ export function getGooglePlacesType(meetupType: string): { type?: string; keywor
  * Search for nearby places using Google Places API
  * @param midLat - Midpoint latitude
  * @param midLng - Midpoint longitude
- * @param meetupType - Type of meetup (gas, restaurant, police, rest, public)
+ * @param meetupType - Type of meetup (police, gas, restaurant, cafe, shopping_mall, park, point_of_interest)
  * @returns Array of places sorted by rating and distance
  */
 export async function searchNearbyPlaces(
