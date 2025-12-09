@@ -20,7 +20,7 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { calculateMidpoint, searchNearbyPlaces, Place } from '@/utils/locationUtils';
+import { calculateMidpoint, searchNearbyPlaces, Place, maskCoordinates } from '@/utils/locationUtils';
 import { DOWNLOAD_LINK } from '@/constants/config';
 
 const MEETUP_TYPES = [
@@ -45,6 +45,9 @@ interface LocationWithAddress {
   longitude: number;
   address?: string;
 }
+
+// Mock current user name - in a real app, this would come from auth/profile
+const CURRENT_USER_NAME = 'John Doe';
 
 export default function MeetNowScreen() {
   const router = useRouter();
@@ -148,11 +151,6 @@ export default function MeetNowScreen() {
     }
   };
 
-  const handleSelectContact = (contact: SavedContact) => {
-    setSelectedContact(contact);
-    console.log('Selected contact:', contact.name);
-  };
-
   const handlePickFromContacts = async () => {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
@@ -212,6 +210,16 @@ export default function MeetNowScreen() {
       return;
     }
 
+    if (!myLocation) {
+      Alert.alert('Location Required', 'Please wait for your location to be obtained before sending an invite.');
+      return;
+    }
+
+    if (!selectedMeetupType) {
+      Alert.alert('Meetup Type Required', 'Please select a meetup type before sending an invite.');
+      return;
+    }
+
     try {
       const isAvailable = await SMS.isAvailableAsync();
       
@@ -227,7 +235,24 @@ export default function MeetNowScreen() {
         return;
       }
 
-      const message = `Hey, download the MidPoint app so we can find a meeting spot halfway between us: ${DOWNLOAD_LINK}`;
+      // Get coordinates (masked if SafeMeet is on)
+      let lat = myLocation.latitude;
+      let lng = myLocation.longitude;
+
+      if (isSafeMode) {
+        const masked = maskCoordinates(lat, lng);
+        lat = masked.lat;
+        lng = masked.lng;
+        console.log('Masked coordinates for SafeMeet:', masked);
+      }
+
+      // Build invite URL with all parameters
+      const inviteUrl = `${DOWNLOAD_LINK}/invite?inviterName=${encodeURIComponent(CURRENT_USER_NAME)}&lat=${lat}&lng=${lng}&type=${encodeURIComponent(selectedMeetupType)}&safe=${isSafeMode}`;
+
+      console.log('Generated invite URL:', inviteUrl);
+
+      // Build SMS message
+      const message = `Hey! I'd like to meet you halfway. Download the MidPoint app and tap this link to share your location and find our meeting spot:\n\n${inviteUrl}`;
       
       const { result } = await SMS.sendSMSAsync(
         [selectedContact.phoneNumber],
@@ -535,7 +560,7 @@ export default function MeetNowScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.inviteButtonText}>
-                📲 Send Download Link via SMS
+                📲 Send Invite via SMS
               </Text>
             </TouchableOpacity>
           )}
@@ -769,6 +794,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  contactInitials: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
   },
   selectedContactInfo: {
     flex: 1,

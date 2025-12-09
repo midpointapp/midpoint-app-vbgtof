@@ -19,6 +19,19 @@ export interface Place {
 }
 
 /**
+ * Mask coordinates by rounding to 2 decimal places for SafeMeet mode
+ * @param lat - Latitude to mask
+ * @param lng - Longitude to mask
+ * @returns Masked coordinates
+ */
+export function maskCoordinates(lat: number, lng: number): { lat: number; lng: number } {
+  return {
+    lat: Math.round(lat * 100) / 100,
+    lng: Math.round(lng * 100) / 100,
+  };
+}
+
+/**
  * Calculate the geographic midpoint between two coordinates
  * @param userLat - User's latitude
  * @param userLng - User's longitude

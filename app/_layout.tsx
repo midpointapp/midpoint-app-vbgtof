@@ -1,8 +1,8 @@
 
 import "react-native-reanimated";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useFonts } from "expo-font";
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -36,7 +36,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (
       !networkState.isConnected &&
       networkState.isInternetReachable === false
@@ -103,6 +103,14 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name="invite"
+                options={{
+                  presentation: "modal",
+                  headerShown: true,
+                  title: "Invite",
+                }}
+              />
+              <Stack.Screen
                 name="create-session"
                 options={{
                   presentation: "modal",
@@ -137,6 +145,30 @@ export default function RootLayout() {
                 options={{
                   presentation: "transparentModal",
                   headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="settings/notifications"
+                options={{
+                  presentation: "modal",
+                  headerShown: true,
+                  title: "Notifications",
+                }}
+              />
+              <Stack.Screen
+                name="settings/privacy"
+                options={{
+                  presentation: "modal",
+                  headerShown: true,
+                  title: "Privacy",
+                }}
+              />
+              <Stack.Screen
+                name="settings/help"
+                options={{
+                  presentation: "modal",
+                  headerShown: true,
+                  title: "Help & Support",
                 }}
               />
             </Stack>

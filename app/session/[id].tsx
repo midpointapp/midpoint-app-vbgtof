@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -117,7 +117,7 @@ export default function SessionScreen() {
   const sessionTitle = contactName ? `Meeting with ${contactName}` : 'MidPoint Session';
   const sessionCategory = type || 'General';
 
-  const initialParticipants: Participant[] = [
+  const initialParticipants: Participant[] = useMemo(() => [
     {
       id: '1',
       session_id: id as string,
@@ -134,7 +134,7 @@ export default function SessionScreen() {
       user_lng: midpointLng ? parseFloat(midpointLng as string) * 2 - (myLocation?.longitude || -122.4194) : -122.2712,
       isCurrentUser: false,
     },
-  ];
+  ], [id, contactName, midpointLat, midpointLng, myLocation]);
 
   const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
 
@@ -152,17 +152,23 @@ export default function SessionScreen() {
     }
   }, [myLocation]);
 
-  const midpoint = midpointLat && midpointLng 
-    ? { latitude: parseFloat(midpointLat as string), longitude: parseFloat(midpointLng as string) }
-    : calculateMidpoint(participants);
+  const midpoint = useMemo(() => {
+    if (midpointLat && midpointLng) {
+      return { latitude: parseFloat(midpointLat as string), longitude: parseFloat(midpointLng as string) };
+    }
+    return calculateMidpoint(participants);
+  }, [midpointLat, midpointLng, participants]);
   
-  let spotsWithDistance = SAMPLE_SPOTS.filter((s) => s.session_id === id);
-  if (midpoint) {
-    spotsWithDistance = spotsWithDistance.map((spot) => ({
-      ...spot,
-      distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
-    })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
-  }
+  const spotsWithDistance = useMemo(() => {
+    let spots = SAMPLE_SPOTS.filter((s) => s.session_id === id);
+    if (midpoint) {
+      spots = spots.map((spot) => ({
+        ...spot,
+        distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
+      })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+    return spots;
+  }, [id, midpoint]);
 
   useEffect(() => {
     if (midpoint) {
