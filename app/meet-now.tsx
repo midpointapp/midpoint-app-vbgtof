@@ -13,12 +13,14 @@ import {
   FlatList,
   KeyboardAvoidingView,
   ActivityIndicator,
-  Share
+  Share,
+  TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
+import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { DOWNLOAD_LINK } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -102,6 +104,11 @@ export default function MeetNowScreen() {
   const [creatingMeetPoint, setCreatingMeetPoint] = useState(false);
   const [currentMeetPoint, setCurrentMeetPoint] = useState<MeetPoint | null>(null);
   const [showReadyBanner, setShowReadyBanner] = useState(false);
+  
+  // "Meet Someone Else" form state
+  const [showMeetSomeoneElseModal, setShowMeetSomeoneElseModal] = useState(false);
+  const [otherPersonName, setOtherPersonName] = useState('');
+  const [otherPersonPhone, setOtherPersonPhone] = useState('');
 
   // Select the appropriate dropdown list based on mode
   const MEETUP_TYPES = isSafeMode ? MEETUP_TYPES_SAFE : MEETUP_TYPES_REGULAR;
@@ -300,6 +307,41 @@ export default function MeetNowScreen() {
     }
   };
 
+  const handleMeetSomeoneElse = () => {
+    setShowMeetSomeoneElseModal(true);
+  };
+
+  const handleSubmitMeetSomeoneElse = () => {
+    if (!otherPersonName.trim()) {
+      Alert.alert('Name Required', 'Please enter a name or label for the person you&apos;re meeting.');
+      return;
+    }
+
+    // Create a contact object from the form data
+    const initials = otherPersonName
+      .split(' ')
+      .map(word => word.charAt(0))
+      .join('')
+      .toUpperCase()
+      .substring(0, 2) || 'U';
+
+    const newContact: SavedContact = {
+      id: Date.now().toString(),
+      name: otherPersonName.trim(),
+      initials: initials,
+      phoneNumber: otherPersonPhone.trim() || undefined,
+    };
+
+    setSelectedContact(newContact);
+    setShowMeetSomeoneElseModal(false);
+    
+    // Reset form
+    setOtherPersonName('');
+    setOtherPersonPhone('');
+
+    console.log('Created contact for "Meet Someone Else":', newContact);
+  };
+
   const handleCreateAndShareMeetPoint = async () => {
     if (!selectedContact) {
       Alert.alert('No Contact Selected', 'Please select a contact first.');
@@ -374,24 +416,100 @@ export default function MeetNowScreen() {
 
       console.log('Generated share URL:', shareUrl);
 
-      // Share the link
+      // Build share message
       const shareMessage = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
 
-      const shareResult = await Share.share({
-        message: shareMessage,
-        title: 'MidPoint Meet Invite',
-      });
+      // Check if we have a phone number and SMS is available
+      const hasSMS = await SMS.isAvailableAsync();
+      const hasPhoneNumber = selectedContact.phoneNumber && selectedContact.phoneNumber.trim().length > 0;
 
-      console.log('Share result:', shareResult);
-
-      setCreatingMeetPoint(false);
-
-      if (shareResult.action === Share.sharedAction) {
+      if (hasSMS && hasPhoneNumber) {
+        // Show options: SMS or Share Link
         Alert.alert(
-          'Invite Sent!',
-          'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
-          [{ text: 'OK' }]
+          'Share Meet Point',
+          'How would you like to share the Meet Point?',
+          [
+            {
+              text: 'Send SMS',
+              onPress: async () => {
+                try {
+                  const { result } = await SMS.sendSMSAsync(
+                    [selectedContact.phoneNumber!],
+                    shareMessage
+                  );
+                  console.log('SMS result:', result);
+                  setCreatingMeetPoint(false);
+                  
+                  if (result === 'sent') {
+                    Alert.alert(
+                      'Invite Sent!',
+                      'Your Meet Point invite has been sent via SMS. You\'ll be notified when they open it.',
+                      [{ text: 'OK' }]
+                    );
+                  }
+                } catch (error) {
+                  console.error('Error sending SMS:', error);
+                  Alert.alert('Error', 'Failed to send SMS. Please try again.');
+                  setCreatingMeetPoint(false);
+                }
+              },
+            },
+            {
+              text: 'Share Link',
+              onPress: async () => {
+                try {
+                  const shareResult = await Share.share({
+                    message: shareMessage,
+                    title: 'MidPoint Meet Invite',
+                  });
+
+                  console.log('Share result:', shareResult);
+                  setCreatingMeetPoint(false);
+
+                  if (shareResult.action === Share.sharedAction) {
+                    Alert.alert(
+                      'Invite Sent!',
+                      'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
+                      [{ text: 'OK' }]
+                    );
+                  }
+                } catch (error) {
+                  console.error('Error sharing:', error);
+                  Alert.alert('Error', 'Failed to share link. Please try again.');
+                  setCreatingMeetPoint(false);
+                }
+              },
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => setCreatingMeetPoint(false),
+            },
+          ]
         );
+      } else {
+        // Only Share Link option available
+        try {
+          const shareResult = await Share.share({
+            message: shareMessage,
+            title: 'MidPoint Meet Invite',
+          });
+
+          console.log('Share result:', shareResult);
+          setCreatingMeetPoint(false);
+
+          if (shareResult.action === Share.sharedAction) {
+            Alert.alert(
+              'Invite Sent!',
+              'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
+              [{ text: 'OK' }]
+            );
+          }
+        } catch (error) {
+          console.error('Error sharing:', error);
+          setCreatingMeetPoint(false);
+          Alert.alert('Error', 'Failed to share link. Please try again.');
+        }
       }
     } catch (error: any) {
       console.error('Error creating and sharing MeetPoint:', error);
@@ -550,6 +668,17 @@ export default function MeetNowScreen() {
                   Pick from Device Contacts
                 </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.pickContactButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+                onPress={handleMeetSomeoneElse}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="person-add" size={24} color={colors.primary} />
+                <Text style={[styles.pickContactButtonText, { color: colors.primary }]}>
+                  Meet Someone Else
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -596,6 +725,7 @@ export default function MeetNowScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Meetup Type Dropdown Modal */}
       <Modal
         visible={showMeetupTypeDropdown}
         transparent
@@ -622,6 +752,83 @@ export default function MeetNowScreen() {
             />
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Meet Someone Else Modal */}
+      <Modal
+        visible={showMeetSomeoneElseModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMeetSomeoneElseModal(false)}
+      >
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowMeetSomeoneElseModal(false)}
+          >
+            <TouchableOpacity 
+              style={[styles.meetSomeoneElseModal, { backgroundColor: colors.background }]}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Meet Someone Else</Text>
+                <TouchableOpacity onPress={() => setShowMeetSomeoneElseModal(false)}>
+                  <MaterialIcons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.formContent}>
+                <Text style={[styles.formDescription, { color: colors.textSecondary }]}>
+                  Meeting someone who&apos;s not in your contacts? Enter their details below.
+                </Text>
+
+                <View style={styles.formField}>
+                  <Text style={[styles.formLabel, { color: colors.text }]}>
+                    Name / Label <Text style={{ color: colors.error }}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                    placeholder="e.g., Facebook Buyer, Marketplace Seller"
+                    placeholderTextColor={colors.textSecondary}
+                    value={otherPersonName}
+                    onChangeText={setOtherPersonName}
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.formField}>
+                  <Text style={[styles.formLabel, { color: colors.text }]}>
+                    Phone Number (Optional)
+                  </Text>
+                  <TextInput
+                    style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                    placeholder="e.g., +1 234 567 8900"
+                    placeholderTextColor={colors.textSecondary}
+                    value={otherPersonPhone}
+                    onChangeText={setOtherPersonPhone}
+                    keyboardType="phone-pad"
+                  />
+                  <Text style={[styles.fieldHint, { color: colors.textSecondary }]}>
+                    Only used to pre-fill SMS if provided
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSubmitMeetSomeoneElse}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.submitButtonText}>Continue</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
   );
@@ -868,5 +1075,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  meetSomeoneElseModal: {
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  formContent: {
+    padding: 20,
+  },
+  formDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  formField: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+  },
+  fieldHint: {
+    fontSize: 12,
+    marginTop: 6,
+  },
+  submitButton: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

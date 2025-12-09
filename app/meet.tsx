@@ -6,18 +6,21 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import * as Location from 'expo-location';
 import { supabase } from '@/app/integrations/supabase/client';
 import { calculateMidpoint, searchNearbyPlaces } from '@/utils/locationUtils';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 export default function MeetPointHandler() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const colors = useThemeColors();
   const [status, setStatus] = useState('Processing your invite...');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     handleMeetPointInvite();
@@ -29,11 +32,7 @@ export default function MeetPointHandler() {
       const meetPointId = params?.meetPointId as string;
 
       if (!meetPointId) {
-        Alert.alert(
-          'Invalid Link',
-          'This invite link is missing required information. Please ask the sender to create a new invite.',
-          [{ text: 'OK', onPress: () => router.replace('/') }]
-        );
+        setError('invalid');
         return;
       }
 
@@ -49,11 +48,7 @@ export default function MeetPointHandler() {
 
       if (fetchError || !meetPoint) {
         console.error('Error fetching MeetPoint:', fetchError);
-        Alert.alert(
-          'Meet Point Not Found',
-          'This Meet Point could not be found. It may have expired or been deleted.',
-          [{ text: 'OK', onPress: () => router.replace('/') }]
-        );
+        setError('notfound');
         return;
       }
 
@@ -159,13 +154,67 @@ export default function MeetPointHandler() {
       });
     } catch (error: any) {
       console.error('Error handling MeetPoint invite:', error);
-      Alert.alert(
-        'Error',
-        error?.message || 'An unexpected error occurred. Please try again.',
-        [{ text: 'OK', onPress: () => router.replace('/') }]
-      );
+      setError('error');
     }
   };
+
+  // Error states
+  if (error === 'invalid') {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <MaterialIcons name="link-off" size={80} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Invalid Link</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+          This invite link is missing required information. Please ask the sender to create a new invite.
+        </Text>
+        <TouchableOpacity
+          style={[styles.errorButton, { backgroundColor: colors.primary }]}
+          onPress={() => router.replace('/')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.errorButtonText}>Go Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (error === 'notfound') {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <MaterialIcons name="location-off" size={80} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Meet Point Not Found</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+          This Meet Point could not be found. It may have expired or been deleted.
+        </Text>
+        <TouchableOpacity
+          style={[styles.errorButton, { backgroundColor: colors.primary }]}
+          onPress={() => router.replace('/')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.errorButtonText}>Go Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (error === 'error') {
+    return (
+      <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <MaterialIcons name="error-outline" size={80} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>Something Went Wrong</Text>
+        <Text style={[styles.errorMessage, { color: colors.textSecondary }]}>
+          An unexpected error occurred. Please try again.
+        </Text>
+        <TouchableOpacity
+          style={[styles.errorButton, { backgroundColor: colors.primary }]}
+          onPress={() => router.replace('/')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.errorButtonText}>Go Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -186,5 +235,34 @@ const styles = StyleSheet.create({
     marginTop: 24,
     fontSize: 16,
     textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  errorButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  errorButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

@@ -143,6 +143,19 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name="meet"
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="midpoint-results"
+                options={{
+                  headerShown: true,
+                  title: "Meet Point Results",
+                }}
+              />
+              <Stack.Screen
                 name="invite"
                 options={{
                   presentation: "modal",
