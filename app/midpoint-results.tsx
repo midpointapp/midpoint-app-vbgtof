@@ -16,7 +16,10 @@ import { useThemeColors } from '@/styles/commonStyles';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { supabase } from '@/app/integrations/supabase/client';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+const USER_STORAGE_KEY = '@midpoint_user';
 
 interface Place {
   id: string;
@@ -35,6 +38,7 @@ interface MeetPoint {
   sender_name: string;
   sender_lat: number;
   sender_lng: number;
+  receiver_name: string | null;
   receiver_lat: number | null;
   receiver_lng: number | null;
   type: string;
@@ -63,6 +67,11 @@ export default function MidpointResultsScreen() {
   const [meetPoint, setMeetPoint] = useState<MeetPoint | null>(null);
   const [loading, setLoading] = useState(true);
   const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadCurrentUserName();
+  }, []);
 
   useEffect(() => {
     if (!meetPointId) {
@@ -82,6 +91,18 @@ export default function MidpointResultsScreen() {
       }
     };
   }, [meetPointId]);
+
+  const loadCurrentUserName = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const userData = JSON.parse(stored);
+        setCurrentUserName(userData?.name || null);
+      }
+    } catch (error) {
+      console.error('Error loading current user name:', error);
+    }
+  };
 
   const loadMeetPoint = async () => {
     try {
@@ -319,6 +340,19 @@ export default function MidpointResultsScreen() {
     );
   };
 
+  // Determine who the "other person" is
+  const getOtherPersonName = (): string => {
+    if (!meetPoint) return 'Unknown';
+    
+    // If current user is the sender, show receiver name
+    if (currentUserName === meetPoint.sender_name) {
+      return meetPoint.receiver_name || 'Unknown';
+    }
+    
+    // If current user is the receiver, show sender name
+    return meetPoint.sender_name || 'Unknown';
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -378,7 +412,7 @@ export default function MidpointResultsScreen() {
 
       <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Meeting with</Text>
-        <Text style={[styles.infoValue, { color: colors.text }]}>{meetPoint.sender_name}</Text>
+        <Text style={[styles.infoValue, { color: colors.text }]}>{getOtherPersonName()}</Text>
       </View>
 
       {meetPoint.selected_place_name && (

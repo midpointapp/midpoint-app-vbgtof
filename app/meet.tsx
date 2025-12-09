@@ -7,6 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
@@ -14,6 +17,9 @@ import * as Location from 'expo-location';
 import { supabase } from '@/app/integrations/supabase/client';
 import { calculateMidpoint, searchNearbyPlaces } from '@/utils/locationUtils';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const USER_STORAGE_KEY = '@midpoint_user';
 
 export default function MeetPointHandler() {
   const router = useRouter();
@@ -21,10 +27,27 @@ export default function MeetPointHandler() {
   const colors = useThemeColors();
   const [status, setStatus] = useState('Processing your invite...');
   const [error, setError] = useState<string | null>(null);
+  const [needsName, setNeedsName] = useState(false);
+  const [receiverName, setReceiverName] = useState('');
+  const [meetPoint, setMeetPoint] = useState<any>(null);
 
   useEffect(() => {
     handleMeetPointInvite();
   }, []);
+
+  const loadUserName = async (): Promise<string | null> => {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const userData = JSON.parse(stored);
+        return userData?.name || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading user name:', error);
+      return null;
+    }
+  };
 
   const handleMeetPointInvite = async () => {
     try {
@@ -32,6 +55,7 @@ export default function MeetPointHandler() {
       const meetPointId = params?.meetPointId as string;
 
       if (!meetPointId) {
+        console.error('No meetPointId in params');
         setError('invalid');
         return;
       }
@@ -40,22 +64,23 @@ export default function MeetPointHandler() {
       setStatus('Looking up your Meet Point...');
 
       // Look up the MeetPoint in Supabase
-      const { data: meetPoint, error: fetchError } = await supabase
+      const { data: meetPointData, error: fetchError } = await supabase
         .from('meet_points')
         .select('*')
         .eq('meet_point_id', meetPointId)
         .single();
 
-      if (fetchError || !meetPoint) {
+      if (fetchError || !meetPointData) {
         console.error('Error fetching MeetPoint:', fetchError);
         setError('notfound');
         return;
       }
 
-      console.log('Found MeetPoint:', meetPoint);
+      console.log('Found MeetPoint:', meetPointData);
+      setMeetPoint(meetPointData);
 
       // Check if already joined
-      if (meetPoint.status !== 'link_sent') {
+      if (meetPointData.status !== 'link_sent') {
         console.log('MeetPoint already processed, navigating to results');
         router.replace({
           pathname: '/midpoint-results',
@@ -64,6 +89,49 @@ export default function MeetPointHandler() {
         return;
       }
 
+      // Check if we have a user name stored
+      const storedName = await loadUserName();
+      
+      if (!storedName) {
+        // Need to ask for name
+        console.log('No stored name found, asking user for name');
+        setNeedsName(true);
+        setStatus('');
+        return;
+      }
+
+      // Proceed with joining
+      await joinMeetPoint(meetPointId, meetPointData, storedName);
+    } catch (error: any) {
+      console.error('Error handling MeetPoint invite:', error);
+      setError('error');
+    }
+  };
+
+  const handleSubmitName = async () => {
+    if (!receiverName.trim()) {
+      Alert.alert('Name Required', 'Please enter your name to continue.');
+      return;
+    }
+
+    // Save name for future use
+    try {
+      await AsyncStorage.setItem(
+        USER_STORAGE_KEY,
+        JSON.stringify({ name: receiverName.trim() })
+      );
+    } catch (error) {
+      console.error('Error saving user name:', error);
+    }
+
+    // Proceed with joining
+    const meetPointId = params?.meetPointId as string;
+    await joinMeetPoint(meetPointId, meetPoint, receiverName.trim());
+  };
+
+  const joinMeetPoint = async (meetPointId: string, meetPointData: any, userName: string) => {
+    try {
+      setNeedsName(false);
       setStatus('Getting your location...');
 
       // Get receiver's GPS location
@@ -82,8 +150,15 @@ export default function MeetPointHandler() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const receiverLat = location.coords.latitude;
-      const receiverLng = location.coords.longitude;
+      let receiverLat = location.coords.latitude;
+      let receiverLng = location.coords.longitude;
+
+      // Mask coordinates if SafeMeet is on
+      if (meetPointData.safe) {
+        receiverLat = Math.round(receiverLat * 100) / 100;
+        receiverLng = Math.round(receiverLng * 100) / 100;
+        console.log('Masked coordinates for SafeMeet:', { receiverLat, receiverLng });
+      }
 
       console.log('Receiver location obtained:', { receiverLat, receiverLng });
 
@@ -91,11 +166,11 @@ export default function MeetPointHandler() {
 
       // Calculate midpoint
       const { midLat, midLng } = calculateMidpoint(
-        meetPoint.sender_lat,
-        meetPoint.sender_lng,
+        meetPointData.sender_lat,
+        meetPointData.sender_lng,
         receiverLat,
         receiverLng,
-        meetPoint.safe
+        meetPointData.safe
       );
 
       console.log('Midpoint calculated:', { midLat, midLng });
@@ -103,7 +178,7 @@ export default function MeetPointHandler() {
       setStatus('Finding nearby places...');
 
       // Search for hotspots near the midpoint
-      const hotspots = await searchNearbyPlaces(midLat, midLng, meetPoint.type);
+      const hotspots = await searchNearbyPlaces(midLat, midLng, meetPointData.type);
 
       console.log(`Found ${hotspots?.length || 0} hotspots`);
 
@@ -121,10 +196,13 @@ export default function MeetPointHandler() {
         console.log('Setting default selected place:', selectedPlaceData);
       }
 
-      // Update the MeetPoint with receiver location, midpoint, hotspots, selected place, and status
+      setStatus('Joining Meet Point...');
+
+      // Update the MeetPoint with receiver info, location, midpoint, hotspots, selected place, and status
       const { error: updateError } = await supabase
         .from('meet_points')
         .update({
+          receiver_name: userName,
           receiver_lat: receiverLat,
           receiver_lng: receiverLng,
           midpoint_lat: midLat,
@@ -132,6 +210,7 @@ export default function MeetPointHandler() {
           hotspot_results: hotspots,
           ...selectedPlaceData,
           status: 'ready',
+          updated_at: new Date().toISOString(),
         })
         .eq('meet_point_id', meetPointId);
 
@@ -145,7 +224,11 @@ export default function MeetPointHandler() {
         return;
       }
 
-      console.log('MeetPoint updated successfully, navigating to results');
+      console.log('MeetPoint updated successfully with receiver name:', userName);
+      console.log('Navigating to results page');
+
+      // Small delay to ensure database update propagates
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Navigate to results page
       router.replace({
@@ -153,10 +236,64 @@ export default function MeetPointHandler() {
         params: { meetPointId },
       });
     } catch (error: any) {
-      console.error('Error handling MeetPoint invite:', error);
-      setError('error');
+      console.error('Error joining MeetPoint:', error);
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to join Meet Point. Please try again.',
+        [{ text: 'OK', onPress: () => router.replace('/') }]
+      );
     }
   };
+
+  // Name input screen
+  if (needsName) {
+    return (
+      <KeyboardAvoidingView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.nameInputContainer}>
+          <MaterialIcons name="person" size={64} color={colors.primary} />
+          <Text style={[styles.nameInputTitle, { color: colors.text }]}>
+            What&apos;s your name?
+          </Text>
+          <Text style={[styles.nameInputSubtitle, { color: colors.textSecondary }]}>
+            This will be shared with the person you&apos;re meeting
+          </Text>
+          <TextInput
+            style={[
+              styles.nameInput,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
+            placeholder="Enter your name"
+            placeholderTextColor={colors.textSecondary}
+            value={receiverName}
+            onChangeText={setReceiverName}
+            autoCapitalize="words"
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleSubmitName}
+          />
+          <TouchableOpacity
+            style={[
+              styles.nameSubmitButton,
+              { backgroundColor: colors.primary },
+              !receiverName.trim() && styles.nameSubmitButtonDisabled,
+            ]}
+            onPress={handleSubmitName}
+            disabled={!receiverName.trim()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.nameSubmitButtonText}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   // Error states
   if (error === 'invalid') {
@@ -220,6 +357,9 @@ export default function MeetPointHandler() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ActivityIndicator size="large" color={colors.primary} />
       <Text style={[styles.statusText, { color: colors.text }]}>{status}</Text>
+      <Text style={[styles.statusSubtext, { color: colors.textSecondary }]}>
+        Please wait while we set up your Meet Point...
+      </Text>
     </View>
   );
 }
@@ -233,8 +373,56 @@ const styles = StyleSheet.create({
   },
   statusText: {
     marginTop: 24,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  statusSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  nameInputContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    gap: 16,
+  },
+  nameInputTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  nameInputSubtitle: {
     fontSize: 16,
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  nameInput: {
+    width: '100%',
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  nameSubmitButton: {
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  nameSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  nameSubmitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,

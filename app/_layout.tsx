@@ -33,10 +33,12 @@ export default function RootLayout() {
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
   const [initialUrlProcessed, setInitialUrlProcessed] = useState(false);
+  const [appReady, setAppReady] = useState(false);
 
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      setAppReady(true);
     }
   }, [loaded]);
 
@@ -54,6 +56,10 @@ export default function RootLayout() {
 
   // Handle deep links with meetPointId query parameter
   useEffect(() => {
+    if (!appReady) {
+      return;
+    }
+
     const handleDeepLink = (url: string) => {
       if (!url) return;
 
@@ -73,11 +79,14 @@ export default function RootLayout() {
           // Navigate to the meet screen with the meetPointId
           // Use a small delay to ensure navigation is ready
           setTimeout(() => {
+            console.log("Navigating to /meet with meetPointId:", meetPointId);
             router.push({
               pathname: '/meet',
               params: { meetPointId },
             });
-          }, 100);
+          }, 300);
+        } else {
+          console.log("No meetPointId found in URL query parameters");
         }
       } catch (error) {
         console.error("Error parsing deep link:", error);
@@ -86,11 +95,15 @@ export default function RootLayout() {
 
     // Handle initial URL if app was opened via deep link
     if (!initialUrlProcessed) {
+      console.log("Checking for initial URL...");
+      
       Linking.getInitialURL()
         .then((url) => {
+          console.log("Initial URL:", url);
           if (url) {
-            console.log("Initial URL:", url);
             handleDeepLink(url);
+          } else {
+            console.log("No initial URL found");
           }
           setInitialUrlProcessed(true);
         })
@@ -102,6 +115,7 @@ export default function RootLayout() {
 
     // Listen for deep links when app is already open
     const subscription = Linking.addEventListener("url", (event) => {
+      console.log("Deep link event received:", event);
       if (event?.url) {
         handleDeepLink(event.url);
       }
@@ -110,7 +124,7 @@ export default function RootLayout() {
     return () => {
       subscription?.remove();
     };
-  }, [initialUrlProcessed, router]);
+  }, [appReady, initialUrlProcessed, router]);
 
   if (!loaded) {
     return null;
