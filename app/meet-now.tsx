@@ -679,17 +679,18 @@ export default function MeetNowScreen() {
         return;
       }
 
+      // Build the share URL explicitly
+      const shareUrl = "https://web-midpoint-app-vbgtof.natively.dev/meet-now?meetPointId=" + meetPointId;
+      console.log("[Invite] FINAL SMS link:", shareUrl);
+
       // Subscribe to real-time updates
       subscribeToMeetPoint(meetPointId);
 
-      // Generate share URL with /meet-now path
-      const shareUrl = generateShareUrl(meetPointId);
-      
-      // Log the final URL right before sending
-      console.log('[Invite] SMS link: ' + shareUrl);
+      // Build share message using the shareUrl variable
+      const message = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
 
-      // Build share message
-      const shareMessage = `Hey ${selectedContact.name}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${shareUrl}`;
+      // Log the final SMS body before sending
+      console.log("[Invite] FINAL SMS body:", message);
 
       // Check if we have a phone number and SMS is available
       const hasSMS = await SMS.isAvailableAsync();
@@ -706,11 +707,10 @@ export default function MeetNowScreen() {
               onPress: async () => {
                 try {
                   console.log('[Invite] Sending SMS to:', selectedContact.phoneNumber);
-                  console.log('[Invite] SMS link: ' + shareUrl);
                   
                   const { result } = await SMS.sendSMSAsync(
                     [selectedContact.phoneNumber!],
-                    shareMessage
+                    message
                   );
                   console.log('SMS result:', result);
                   setCreatingMeetPoint(false);
@@ -733,10 +733,10 @@ export default function MeetNowScreen() {
               text: 'Share Link',
               onPress: async () => {
                 try {
-                  console.log('[Invite] Sharing link:', shareUrl);
+                  console.log('[Invite] Sharing link');
                   
                   const shareResult = await Share.share({
-                    message: shareMessage,
+                    message: message,
                     title: 'MidPoint Meet Invite',
                   });
 
@@ -767,10 +767,10 @@ export default function MeetNowScreen() {
       } else {
         // Only Share Link option available
         try {
-          console.log('[Invite] Sharing link:', shareUrl);
+          console.log('[Invite] Sharing link');
           
           const shareResult = await Share.share({
-            message: shareMessage,
+            message: message,
             title: 'MidPoint Meet Invite',
           });
 
