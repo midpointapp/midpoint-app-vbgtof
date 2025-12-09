@@ -30,12 +30,12 @@ export default function InviteScreen() {
   const params = useLocalSearchParams();
   const colors = useThemeColors();
 
-  // Parse URL parameters
-  const inviterName = params.inviterName as string;
-  const inviterLat = params.lat ? parseFloat(params.lat as string) : null;
-  const inviterLng = params.lng ? parseFloat(params.lng as string) : null;
-  const meetupType = params.type as string;
-  const isSafeMode = params.safe === 'true';
+  // Parse URL parameters with safe fallbacks
+  const inviterName = (params?.inviterName as string) || 'Someone';
+  const inviterLat = params?.lat ? parseFloat(params.lat as string) : null;
+  const inviterLng = params?.lng ? parseFloat(params.lng as string) : null;
+  const meetupType = (params?.type as string) || 'public';
+  const isSafeMode = params?.safe === 'true';
 
   const [myLocation, setMyLocation] = useState<LocationWithAddress | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -47,14 +47,14 @@ export default function InviteScreen() {
 
   // Validate parameters on mount
   useEffect(() => {
-    if (!inviterName || inviterLat === null || inviterLng === null || !meetupType) {
+    if (inviterLat === null || inviterLng === null || isNaN(inviterLat) || isNaN(inviterLng)) {
       Alert.alert(
         'Invalid Invite Link',
-        'This invite link is missing required information. Please ask the sender to create a new invite.',
+        'This invite link is missing location information. Please ask the sender to create a new invite.',
         [{ text: 'Go Back', onPress: () => router.back() }]
       );
     }
-  }, [inviterName, inviterLat, inviterLng, meetupType]);
+  }, [inviterLat, inviterLng]);
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string | null> => {
     try {
@@ -63,11 +63,11 @@ export default function InviteScreen() {
       if (results && results.length > 0) {
         const address = results[0];
         const parts = [
-          address.streetNumber,
-          address.street,
-          address.city,
-          address.region,
-          address.postalCode,
+          address?.streetNumber,
+          address?.street,
+          address?.city,
+          address?.region,
+          address?.postalCode,
         ].filter(Boolean);
 
         const formattedAddress = parts.join(', ');
@@ -150,7 +150,7 @@ export default function InviteScreen() {
       return;
     }
 
-    if (inviterLat === null || inviterLng === null) {
+    if (inviterLat === null || inviterLng === null || isNaN(inviterLat) || isNaN(inviterLng)) {
       Alert.alert('Error', 'Invalid inviter location. Please ask for a new invite link.');
       return;
     }
@@ -180,9 +180,9 @@ export default function InviteScreen() {
       // Search for nearby places using Google Places API
       const foundPlaces = await searchNearbyPlaces(midLat, midLng, meetupType);
 
-      console.log(`Found ${foundPlaces.length} places`);
+      console.log(`Found ${foundPlaces?.length || 0} places`);
 
-      if (foundPlaces.length === 0) {
+      if (!foundPlaces || foundPlaces.length === 0) {
         Alert.alert(
           'No Places Found',
           'No places found near the midpoint. Try a different meetup type or contact the inviter.',
@@ -201,7 +201,7 @@ export default function InviteScreen() {
 
       let errorMessage = 'Failed to find places. Please try again.';
 
-      if (error.message) {
+      if (error?.message) {
         if (error.message.includes('API key not configured')) {
           errorMessage = 'Google Places API key not configured. Please contact the app developer.';
         } else if (error.message.includes('API request denied')) {
@@ -218,6 +218,11 @@ export default function InviteScreen() {
   };
 
   const handleOpenInMaps = (place: Place) => {
+    if (!place) {
+      Alert.alert('Error', 'Invalid place data');
+      return;
+    }
+
     const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place.placeId || ''}`;
 
     console.log('Opening maps for place:', place.name);
@@ -230,7 +235,7 @@ export default function InviteScreen() {
 
   const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => (
     <View
-      key={item.id}
+      key={item?.id || `place-${index}`}
       style={[styles.placeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
       <View style={styles.placeHeader}>
@@ -239,13 +244,13 @@ export default function InviteScreen() {
         </View>
         <View style={styles.placeInfo}>
           <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
+            {item?.name || 'Unknown Place'}
           </Text>
           <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item.address}
+            {item?.address || 'Address not available'}
           </Text>
           <View style={styles.placeMetrics}>
-            {item.rating > 0 && (
+            {item?.rating > 0 && (
               <View style={styles.ratingContainer}>
                 <MaterialIcons name="star" size={16} color="#FFC107" />
                 <Text style={[styles.ratingText, { color: colors.text }]}>
@@ -256,7 +261,7 @@ export default function InviteScreen() {
             <View style={styles.distanceContainer}>
               <MaterialIcons name="place" size={16} color={colors.textSecondary} />
               <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
-                {item.distance.toFixed(1)} km
+                {item?.distance?.toFixed(1) || '0.0'} km
               </Text>
             </View>
           </View>
@@ -301,7 +306,7 @@ export default function InviteScreen() {
           </Text>
 
           <Text style={[styles.inviteSubtitle, { color: colors.textSecondary }]}>
-            {inviterName || 'Someone'} wants to meet you halfway
+            {inviterName} wants to meet you halfway
           </Text>
 
           {meetupType && (
@@ -448,7 +453,7 @@ export default function InviteScreen() {
               </View>
 
               <Text style={[styles.resultTitle, { color: colors.text }]}>
-                {places.length} Place{places.length !== 1 ? 's' : ''} Found!
+                {places?.length || 0} Place{places?.length !== 1 ? 's' : ''} Found!
               </Text>
 
               {inviterName && (
@@ -466,7 +471,7 @@ export default function InviteScreen() {
               <FlatList
                 data={places}
                 renderItem={renderPlaceItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item, index) => item?.id || `place-${index}`}
                 style={styles.placesList}
                 contentContainerStyle={styles.placesListContent}
                 showsVerticalScrollIndicator={true}

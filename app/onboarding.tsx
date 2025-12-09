@@ -13,6 +13,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const USER_STORAGE_KEY = '@midpoint_user';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -34,23 +37,48 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [homeArea, setHomeArea] = useState('');
 
-  const handleEmailLogin = () => {
+  const saveUserData = async (userData: any) => {
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      console.log('User data saved:', userData);
+    } catch (error) {
+      console.error('Error saving user data:', error);
+    }
+  };
+
+  const handleEmailLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     console.log('Logging in with email:', email);
+    
+    // Save basic user data
+    await saveUserData({
+      email: email || '',
+      name: 'User',
+      homeArea: '',
+    });
+    
     router.replace('/(tabs)/(home)/');
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (!email || !password || !name || !homeArea) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     console.log('Signing up:', { email, name, homeArea });
+    
+    // Save user data with safe fallbacks
+    await saveUserData({
+      email: email || '',
+      name: name || 'User',
+      homeArea: homeArea || '',
+    });
+    
     router.replace('/(tabs)/(home)/');
   };
 

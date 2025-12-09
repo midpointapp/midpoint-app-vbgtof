@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,26 +16,73 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import { useThemeColors } from '@/styles/commonStyles';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const mockCurrentUser = {
-  id: '1',
-  name: 'John Doe',
-  email: 'john@example.com',
-  photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
-  home_area: 'San Francisco, CA',
-};
+const USER_STORAGE_KEY = '@midpoint_user';
+
+interface UserData {
+  email: string;
+  name: string;
+  homeArea: string;
+  photo?: string;
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
   const colors = useThemeColors();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(mockCurrentUser.name);
-  const [homeArea, setHomeArea] = useState(mockCurrentUser.home_area);
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(mockCurrentUser.photo);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [homeArea, setHomeArea] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const userData: UserData = JSON.parse(stored);
+        setName(userData?.name || '');
+        setEmail(userData?.email || '');
+        setHomeArea(userData?.homeArea || '');
+        setProfilePhoto(userData?.photo || null);
+        console.log('Loaded user data:', userData);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveUserData = async () => {
+    try {
+      const userData: UserData = {
+        email,
+        name,
+        homeArea,
+        photo: profilePhoto || undefined,
+      };
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      console.log('Saved user data:', userData);
+    } catch (error) {
+      console.error('Error saving user data:', error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!name || !homeArea) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
     console.log('Saving profile:', { name, homeArea, profilePhoto });
+    await saveUserData();
     Alert.alert('Success', 'Profile updated successfully!');
     setIsEditing(false);
   };
@@ -43,7 +91,11 @@ export default function ProfileScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant photo library access.');
+        Alert.alert(
+          'Permission Required',
+          'Please grant photo library access to change your profile photo.',
+          [{ text: 'OK' }]
+        );
         return;
       }
 
@@ -55,15 +107,57 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
-        setProfilePhoto(imageUri);
-        Alert.alert('Success', 'Profile photo updated!');
+        const imageUri = result.assets[0]?.uri;
+        if (imageUri) {
+          setProfilePhoto(imageUri);
+          // Auto-save photo
+          const userData: UserData = {
+            email,
+            name,
+            homeArea,
+            photo: imageUri,
+          };
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+          Alert.alert('Success', 'Profile photo updated!');
+        }
       }
     } catch (error) {
-      console.error('Image error:', error);
-      Alert.alert('Error', 'Failed to pick image.');
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(USER_STORAGE_KEY);
+              router.replace('/onboarding');
+            } catch (error) {
+              console.error('Error logging out:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -95,7 +189,7 @@ export default function ProfileScreen() {
                 <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.email, { color: colors.textSecondary }]}>{mockCurrentUser.email}</Text>
+            <Text style={[styles.email, { color: colors.textSecondary }]}>{email || 'No email'}</Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -117,7 +211,7 @@ export default function ProfileScreen() {
                   placeholderTextColor={colors.textSecondary}
                 />
               ) : (
-                <Text style={[styles.fieldValue, { color: colors.text }]}>{name}</Text>
+                <Text style={[styles.fieldValue, { color: colors.text }]}>{name || 'Not set'}</Text>
               )}
             </View>
 
@@ -132,7 +226,7 @@ export default function ProfileScreen() {
                   placeholderTextColor={colors.textSecondary}
                 />
               ) : (
-                <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea}</Text>
+                <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea || 'Not set'}</Text>
               )}
             </View>
           </View>
@@ -140,7 +234,10 @@ export default function ProfileScreen() {
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
             
-            <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/settings/notifications')}>
+            <TouchableOpacity 
+              style={styles.settingItem} 
+              onPress={() => router.push('/settings/notifications')}
+            >
               <MaterialIcons name="notifications" size={24} color={colors.text} />
               <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
               <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -148,7 +245,10 @@ export default function ProfileScreen() {
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/settings/privacy')}>
+            <TouchableOpacity 
+              style={styles.settingItem} 
+              onPress={() => router.push('/settings/privacy')}
+            >
               <MaterialIcons name="lock" size={24} color={colors.text} />
               <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
               <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -156,14 +256,20 @@ export default function ProfileScreen() {
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/settings/help')}>
+            <TouchableOpacity 
+              style={styles.settingItem} 
+              onPress={() => router.push('/settings/help')}
+            >
               <MaterialIcons name="help" size={24} color={colors.text} />
               <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
               <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.error }]}>
+          <TouchableOpacity 
+            style={[styles.logoutButton, { backgroundColor: colors.error }]}
+            onPress={handleLogout}
+          >
             <Text style={styles.logoutText}>Log Out</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -174,6 +280,8 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { fontSize: 16 },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
   header: { alignItems: 'center', marginBottom: 32 },
@@ -196,4 +304,3 @@ const styles = StyleSheet.create({
   logoutButton: { borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
   logoutText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
-

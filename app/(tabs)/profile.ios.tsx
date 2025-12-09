@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,44 +9,153 @@ import {
   TextInput,
   Image,
   Alert,
-  useColorScheme,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import * as ImagePicker from 'expo-image-picker';
+import { useThemeColors } from '@/styles/commonStyles';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const mockCurrentUser = {
-  id: '1',
-  name: 'John Doe',
-  email: 'john@example.com',
-  photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop',
-  home_area: 'San Francisco, CA',
-  preferences: 'Coffee shops, parks',
-};
+const USER_STORAGE_KEY = '@midpoint_user';
+
+interface UserData {
+  email: string;
+  name: string;
+  homeArea: string;
+  photo?: string;
+}
 
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const colors = {
-    background: isDark ? '#121212' : '#F5F5F5',
-    text: isDark ? '#FFFFFF' : '#212121',
-    textSecondary: isDark ? '#B0B0B0' : '#757575',
-    primary: '#3F51B5',
-    secondary: '#E91E63',
-    card: isDark ? '#212121' : '#FFFFFF',
-    border: isDark ? '#424242' : '#E0E0E0',
-    error: '#F44336',
-  };
+  const router = useRouter();
+  const colors = useThemeColors();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(mockCurrentUser.name);
-  const [homeArea, setHomeArea] = useState(mockCurrentUser.home_area);
-  const [preferences, setPreferences] = useState(mockCurrentUser.preferences || '');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [homeArea, setHomeArea] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleSave = () => {
-    console.log('Saving profile:', { name, homeArea, preferences });
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const userData: UserData = JSON.parse(stored);
+        setName(userData?.name || '');
+        setEmail(userData?.email || '');
+        setHomeArea(userData?.homeArea || '');
+        setProfilePhoto(userData?.photo || null);
+        console.log('Loaded user data:', userData);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveUserData = async () => {
+    try {
+      const userData: UserData = {
+        email: email || '',
+        name: name || '',
+        homeArea: homeArea || '',
+        photo: profilePhoto || undefined,
+      };
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      console.log('Saved user data:', userData);
+    } catch (error) {
+      console.error('Error saving user data:', error);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!name || !homeArea) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    console.log('Saving profile:', { name, homeArea, profilePhoto });
+    await saveUserData();
     Alert.alert('Success', 'Profile updated successfully!');
     setIsEditing(false);
   };
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant photo library access to change your profile photo.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const imageUri = result.assets[0]?.uri;
+        if (imageUri) {
+          setProfilePhoto(imageUri);
+          // Auto-save photo
+          const userData: UserData = {
+            email: email || '',
+            name: name || '',
+            homeArea: homeArea || '',
+            photo: imageUri,
+          };
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+          Alert.alert('Success', 'Profile photo updated!');
+        }
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem(USER_STORAGE_KEY);
+              router.replace('/onboarding');
+            } catch (error) {
+              console.error('Error logging out:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -56,26 +165,27 @@ export default function ProfileScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            {mockCurrentUser.photo ? (
-              <Image source={{ uri: mockCurrentUser.photo }} style={styles.avatar} />
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
                 <MaterialIcons name="person" size={48} color={colors.card} />
               </View>
             )}
-            <TouchableOpacity style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}>
+            <TouchableOpacity
+              style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}
+              onPress={handlePickImage}
+            >
               <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.email, { color: colors.textSecondary }]}>{mockCurrentUser.email}</Text>
+          <Text style={[styles.email, { color: colors.textSecondary }]}>{email || 'No email'}</Text>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>Profile Information</Text>
-            <TouchableOpacity
-              onPress={() => (isEditing ? handleSave() : setIsEditing(true))}
-            >
+            <TouchableOpacity onPress={() => (isEditing ? handleSave() : setIsEditing(true))}>
               <Text style={[styles.editButton, { color: colors.primary }]}>{isEditing ? 'Save' : 'Edit'}</Text>
             </TouchableOpacity>
           </View>
@@ -91,7 +201,7 @@ export default function ProfileScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
             ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>{name}</Text>
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{name || 'Not set'}</Text>
             )}
           </View>
 
@@ -106,33 +216,18 @@ export default function ProfileScreen() {
                 placeholderTextColor={colors.textSecondary}
               />
             ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea}</Text>
-            )}
-          </View>
-
-          <View style={styles.fieldContainer}>
-            <Text style={[styles.label, { color: colors.text }]}>Preferences</Text>
-            {isEditing ? (
-              <TextInput
-                style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
-                value={preferences}
-                onChangeText={setPreferences}
-                placeholder="Your preferences..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={3}
-              />
-            ) : (
-              <Text style={[styles.fieldValue, { color: colors.text }]}>
-                {preferences || 'No preferences set'}
-              </Text>
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea || 'Not set'}</Text>
             )}
           </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Settings</Text>
-          <TouchableOpacity style={styles.settingItem}>
+          
+          <TouchableOpacity 
+            style={styles.settingItem} 
+            onPress={() => router.push('/settings/notifications')}
+          >
             <MaterialIcons name="notifications" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Notifications</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -140,7 +235,10 @@ export default function ProfileScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem} 
+            onPress={() => router.push('/settings/privacy')}
+          >
             <MaterialIcons name="lock" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Privacy</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
@@ -148,14 +246,20 @@ export default function ProfileScreen() {
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem} 
+            onPress={() => router.push('/settings/help')}
+          >
             <MaterialIcons name="help" size={24} color={colors.text} />
             <Text style={[styles.settingText, { color: colors.text }]}>Help & Support</Text>
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.error }]}>
+        <TouchableOpacity 
+          style={[styles.logoutButton, { backgroundColor: colors.error }]}
+          onPress={handleLogout}
+        >
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -164,117 +268,28 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 120,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-  },
-  email: {
-    fontSize: 16,
-  },
-  card: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  editButton: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    borderWidth: 1,
-  },
-  fieldValue: {
-    fontSize: 16,
-    paddingVertical: 8,
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  settingText: {
-    flex: 1,
-    fontSize: 16,
-  },
-  logoutButton: {
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  logoutText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { fontSize: 16 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
+  header: { alignItems: 'center', marginBottom: 32 },
+  avatarContainer: { position: 'relative', marginBottom: 16 },
+  avatar: { width: 100, height: 100, borderRadius: 50 },
+  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
+  editAvatarButton: { position: 'absolute', bottom: 0, right: 0, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 3 },
+  email: { fontSize: 16 },
+  card: { borderRadius: 12, padding: 16, marginBottom: 16, elevation: 3 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold' },
+  editButton: { fontSize: 16, fontWeight: '600' },
+  fieldContainer: { marginBottom: 16 },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { borderRadius: 8, padding: 12, fontSize: 16, borderWidth: 1 },
+  fieldValue: { fontSize: 16, paddingVertical: 8 },
+  divider: { height: 1, marginVertical: 16 },
+  settingItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  settingText: { flex: 1, fontSize: 16 },
+  logoutButton: { borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 16 },
+  logoutText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

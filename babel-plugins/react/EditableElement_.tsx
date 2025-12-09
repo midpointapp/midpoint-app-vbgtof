@@ -1,3 +1,4 @@
+
 /* eslint-disable */
 
 // @eslint-ignore-file
@@ -34,30 +35,45 @@ const toArray = (object: T | T[]): T[] => {
 };
 
 export default function EditableElement_(_props: PropsWithChildren<any>) {
+  const context = useContext(EditableContext);
+  
+  // Safe access to context properties with fallbacks
   const {
-    editModeEnabled,
-    selected,
-    onElementClick,
-    attributes: overwrittenProps,
-    hovered,
-    pushHovered,
-    popHovered,
-  } = useContext(EditableContext);
+    editModeEnabled = false,
+    selected = null,
+    onElementClick = () => {},
+    attributes: overwrittenProps = {},
+    hovered = null,
+    pushHovered = () => {},
+    popHovered = () => {},
+  } = context || {};
 
-  const { children } = _props;
-  const { props } = children;
+  const { children } = _props || {};
+  
+  // Early return if children is not valid
+  if (!children) {
+    return null;
+  }
+  
+  const { props } = children || {};
 
   // If we are not running in the web the windows will causes
   // issues hence editable mode is not enabled.
   if (Platform.OS !== "web") {
-    return cloneElement(children, props);
+    return cloneElement(children, props || {});
   }
 
   const type = getType(children);
-  const __sourceLocation = props.__sourceLocation;
-  const __trace = props.__trace;
+  const __sourceLocation = props?.__sourceLocation;
+  const __trace = props?.__trace;
+  
+  // If no trace, return children as-is
+  if (!__trace) {
+    return cloneElement(children, props || {});
+  }
+  
   const id = __trace.join("");
-  const attributes = overwrittenProps[id] ?? {};
+  const attributes = overwrittenProps?.[id] ?? {};
 
   const editStyling =
     selected === id
@@ -71,16 +87,18 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
       : {};
 
   const onClick = (ev: any) => {
-    ev.stopPropagation();
-    ev.preventDefault();
+    if (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
     onElementClick({
       sourceLocation: __sourceLocation,
       id,
       type,
       trace: __trace,
       props: {
-        style: { ...props.style },
-        children: isPrimitive(props.children) ? props.children : undefined,
+        style: { ...(props?.style || {}) },
+        children: isPrimitive(props?.children) ? props.children : undefined,
       },
     });
   };
@@ -97,9 +115,9 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
 
     return cloneElement(children, {
       ...editProps,
-      ...props,
-      style: [...toArray(props.style), editStyling, attributes.style ?? {}],
-      children: attributes.children ?? children.props.children,
+      ...(props || {}),
+      style: [...toArray(props?.style || {}), editStyling, attributes?.style ?? {}],
+      children: attributes?.children ?? children?.props?.children,
     });
   }
 
@@ -107,10 +125,10 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
     if (!editModeEnabled) return children;
 
     return cloneElement(children, {
-      ...props,
+      ...(props || {}),
       ...editProps,
-      style: [...toArray(props.style), editStyling, attributes.style ?? {}],
-      children: children.props.children,
+      style: [...toArray(props?.style || {}), editStyling, attributes?.style ?? {}],
+      children: children?.props?.children,
     });
   }
 
@@ -118,10 +136,10 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
     if (!editModeEnabled) return children;
 
     return cloneElement(children, {
-      ...props,
+      ...(props || {}),
       ...editProps,
-      style: [...toArray(props.style), editStyling, attributes.style ?? {}],
-      children: children.props.children,
+      style: [...toArray(props?.style || {}), editStyling, attributes?.style ?? {}],
+      children: children?.props?.children,
     });
   }
 
@@ -129,10 +147,13 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
     if (!editModeEnabled) return children;
 
     return cloneElement(children, {
-      ...props,
+      ...(props || {}),
       ...editProps,
-      style: [...toArray(props.style), editStyling, attributes.style ?? {}],
-      children: children.props.children,
+      style: [...toArray(props?.style || {}), editStyling, attributes?.style ?? {}],
+      children: children?.props?.children,
     });
   }
+  
+  // Default fallback
+  return children;
 }

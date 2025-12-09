@@ -8,6 +8,7 @@ import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme, Alert } from "react-native";
 import { useNetworkState } from "expo-network";
+import * as Linking from "expo-linking";
 import {
   DarkTheme,
   DefaultTheme,
@@ -47,6 +48,45 @@ export default function RootLayout() {
       );
     }
   }, [networkState.isConnected, networkState.isInternetReachable]);
+
+  // Handle deep links
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      const url = event?.url;
+      if (!url) return;
+
+      console.log("Deep link received:", url);
+      
+      try {
+        const parsed = Linking.parse(url);
+        console.log("Parsed deep link:", parsed);
+        
+        // The routing will be handled automatically by expo-router
+        // based on the URL path
+      } catch (error) {
+        console.error("Error parsing deep link:", error);
+      }
+    };
+
+    // Listen for deep links when app is already open
+    const subscription = Linking.addEventListener("url", handleDeepLink);
+
+    // Handle initial URL if app was opened via deep link
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) {
+          console.log("Initial URL:", url);
+          handleDeepLink({ url });
+        }
+      })
+      .catch((error) => {
+        console.error("Error getting initial URL:", error);
+      });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
 
   if (!loaded) {
     return null;

@@ -22,6 +22,9 @@ import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { calculateMidpoint, searchNearbyPlaces, Place, maskCoordinates } from '@/utils/locationUtils';
 import { DOWNLOAD_LINK } from '@/constants/config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const USER_STORAGE_KEY = '@midpoint_user';
 
 const MEETUP_TYPES = [
   { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
@@ -46,15 +49,13 @@ interface LocationWithAddress {
   address?: string;
 }
 
-// Mock current user name - in a real app, this would come from auth/profile
-const CURRENT_USER_NAME = 'John Doe';
-
 export default function MeetNowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const colors = useThemeColors();
-  const isSafeMode = params.safeMode === 'true';
+  const isSafeMode = params?.safeMode === 'true';
 
+  const [currentUserName, setCurrentUserName] = useState('User');
   const [selectedContact, setSelectedContact] = useState<SavedContact | null>(null);
   const [selectedMeetupType, setSelectedMeetupType] = useState<string | null>(null);
   const [showMeetupTypeDropdown, setShowMeetupTypeDropdown] = useState(false);
@@ -67,8 +68,21 @@ export default function MeetNowScreen() {
   const [midpointCoords, setMidpointCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
+    loadUserName();
     getCurrentLocation();
   }, []);
+
+  const loadUserName = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (stored) {
+        const userData = JSON.parse(stored);
+        setCurrentUserName(userData?.name || 'User');
+      }
+    } catch (error) {
+      console.error('Error loading user name:', error);
+    }
+  };
 
   const reverseGeocode = async (latitude: number, longitude: number): Promise<string | null> => {
     try {
@@ -77,11 +91,11 @@ export default function MeetNowScreen() {
       if (results && results.length > 0) {
         const address = results[0];
         const parts = [
-          address.streetNumber,
-          address.street,
-          address.city,
-          address.region,
-          address.postalCode,
+          address?.streetNumber,
+          address?.street,
+          address?.city,
+          address?.region,
+          address?.postalCode,
         ].filter(Boolean);
         
         const formattedAddress = parts.join(', ');
@@ -159,19 +173,19 @@ export default function MeetNowScreen() {
         const contact = await Contacts.presentContactPickerAsync();
         
         if (contact) {
-          const firstName = contact.firstName || '';
-          const lastName = contact.lastName || '';
+          const firstName = contact?.firstName || '';
+          const lastName = contact?.lastName || '';
           const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
           const initials = (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || 'U';
           
-          const phoneNumber = contact.phoneNumbers && contact.phoneNumbers.length > 0 
-            ? contact.phoneNumbers[0].number 
+          const phoneNumber = contact?.phoneNumbers && contact.phoneNumbers.length > 0 
+            ? contact.phoneNumbers[0]?.number 
             : undefined;
           
           // Demo coordinates: Generate random location near San Francisco Bay Area
           // In a real app, this would come from the contact's stored location or their device
           const newContact: SavedContact = {
-            id: contact.id || Date.now().toString(),
+            id: contact?.id || Date.now().toString(),
             name: fullName,
             initials: initials,
             phoneNumber: phoneNumber,
@@ -247,7 +261,7 @@ export default function MeetNowScreen() {
       }
 
       // Build invite URL with all parameters
-      const inviteUrl = `${DOWNLOAD_LINK}/invite?inviterName=${encodeURIComponent(CURRENT_USER_NAME)}&lat=${lat}&lng=${lng}&type=${encodeURIComponent(selectedMeetupType)}&safe=${isSafeMode}`;
+      const inviteUrl = `${DOWNLOAD_LINK}/invite?inviterName=${encodeURIComponent(currentUserName)}&lat=${lat}&lng=${lng}&type=${encodeURIComponent(selectedMeetupType)}&safe=${isSafeMode}`;
 
       console.log('Generated invite URL:', inviteUrl);
 
@@ -329,9 +343,9 @@ export default function MeetNowScreen() {
       // Search for nearby places using Google Places API
       const foundPlaces = await searchNearbyPlaces(midLat, midLng, selectedMeetupType);
 
-      console.log(`Found ${foundPlaces.length} places`);
+      console.log(`Found ${foundPlaces?.length || 0} places`);
 
-      if (foundPlaces.length === 0) {
+      if (!foundPlaces || foundPlaces.length === 0) {
         Alert.alert(
           'No Places Found',
           'No places found near the midpoint. Try selecting a different meetup type or expanding your search area.',
@@ -350,7 +364,7 @@ export default function MeetNowScreen() {
       
       let errorMessage = 'Failed to find places. Please try again.';
       
-      if (error.message) {
+      if (error?.message) {
         if (error.message.includes('API key not configured')) {
           errorMessage = 'Google Places API key not configured. Please add your API key in constants/config.ts to use this feature.';
         } else if (error.message.includes('API request denied')) {
@@ -367,7 +381,12 @@ export default function MeetNowScreen() {
   };
 
   const handleOpenInMaps = (place: Place) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place.placeId || ''}`;
+    if (!place) {
+      Alert.alert('Error', 'Invalid place data');
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place?.placeId || ''}`;
     
     console.log('Opening maps for place:', place.name);
     
@@ -379,7 +398,7 @@ export default function MeetNowScreen() {
 
   const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => (
     <View 
-      key={item.id}
+      key={item?.id || `place-${index}`}
       style={[styles.placeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
       <View style={styles.placeHeader}>
@@ -388,13 +407,13 @@ export default function MeetNowScreen() {
         </View>
         <View style={styles.placeInfo}>
           <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
+            {item?.name || 'Unknown Place'}
           </Text>
           <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item.address}
+            {item?.address || 'Address not available'}
           </Text>
           <View style={styles.placeMetrics}>
-            {item.rating > 0 && (
+            {item?.rating > 0 && (
               <View style={styles.ratingContainer}>
                 <MaterialIcons name="star" size={16} color="#FFC107" />
                 <Text style={[styles.ratingText, { color: colors.text }]}>
@@ -405,7 +424,7 @@ export default function MeetNowScreen() {
             <View style={styles.distanceContainer}>
               <MaterialIcons name="place" size={16} color={colors.textSecondary} />
               <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
-                {item.distance.toFixed(1)} km
+                {item?.distance?.toFixed(1) || '0.0'} km
               </Text>
             </View>
           </View>
@@ -424,26 +443,26 @@ export default function MeetNowScreen() {
 
   const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
     <TouchableOpacity
-      key={item.id}
+      key={item?.id}
       style={[
         styles.dropdownItem,
         { backgroundColor: colors.card, borderColor: colors.border }
       ]}
       onPress={() => {
-        setSelectedMeetupType(item.id);
+        setSelectedMeetupType(item?.id);
         setShowMeetupTypeDropdown(false);
       }}
       activeOpacity={0.7}
     >
-      <MaterialIcons name={item.icon} size={24} color={colors.primary} />
-      <Text style={[styles.dropdownItemText, { color: colors.text }]}>{item.label}</Text>
-      {selectedMeetupType === item.id && (
+      <MaterialIcons name={item?.icon || 'place'} size={24} color={colors.primary} />
+      <Text style={[styles.dropdownItemText, { color: colors.text }]}>{item?.label || 'Unknown'}</Text>
+      {selectedMeetupType === item?.id && (
         <MaterialIcons name="check" size={24} color={colors.success} />
       )}
     </TouchableOpacity>
   );
 
-  const selectedMeetupTypeLabel = MEETUP_TYPES.find(t => t.id === selectedMeetupType)?.label;
+  const selectedMeetupTypeLabel = MEETUP_TYPES.find(t => t?.id === selectedMeetupType)?.label;
 
   return (
     <KeyboardAvoidingView 
@@ -519,13 +538,13 @@ export default function MeetNowScreen() {
           {selectedContact ? (
             <View style={[styles.selectedContactCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
               <View style={[styles.contactAvatar, { backgroundColor: colors.primary }]}>
-                <Text style={styles.contactInitials}>{selectedContact.initials}</Text>
+                <Text style={styles.contactInitials}>{selectedContact?.initials || 'U'}</Text>
               </View>
               <View style={styles.selectedContactInfo}>
                 <Text style={[styles.selectedContactName, { color: colors.text }]}>
-                  {selectedContact.name}
+                  {selectedContact?.name || 'Unknown'}
                 </Text>
-                {selectedContact.phoneNumber && (
+                {selectedContact?.phoneNumber && (
                   <Text style={[styles.contactPhoneText, { color: colors.textSecondary }]}>
                     {selectedContact.phoneNumber}
                   </Text>
@@ -574,7 +593,7 @@ export default function MeetNowScreen() {
             activeOpacity={0.7}
           >
             <MaterialIcons 
-              name={selectedMeetupType ? MEETUP_TYPES.find(t => t.id === selectedMeetupType)?.icon || 'place' : 'place'} 
+              name={selectedMeetupType ? MEETUP_TYPES.find(t => t?.id === selectedMeetupType)?.icon || 'place' : 'place'} 
               size={24} 
               color={selectedMeetupType ? colors.primary : colors.textSecondary} 
             />
@@ -629,7 +648,7 @@ export default function MeetNowScreen() {
             <FlatList
               data={MEETUP_TYPES}
               renderItem={renderMeetupTypeItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item?.id || 'unknown'}
               contentContainerStyle={styles.dropdownList}
             />
           </View>
@@ -657,12 +676,12 @@ export default function MeetNowScreen() {
               </View>
               
               <Text style={[styles.resultTitle, { color: colors.text }]}>
-                {places.length} Place{places.length !== 1 ? 's' : ''} Found!
+                {places?.length || 0} Place{places?.length !== 1 ? 's' : ''} Found!
               </Text>
               
               {selectedContact && (
                 <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
-                  Meeting with {selectedContact.name}
+                  Meeting with {selectedContact?.name || 'Unknown'}
                 </Text>
               )}
 
@@ -675,7 +694,7 @@ export default function MeetNowScreen() {
               <FlatList
                 data={places}
                 renderItem={renderPlaceItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item, index) => item?.id || `place-${index}`}
                 style={styles.placesList}
                 contentContainerStyle={styles.placesListContent}
                 showsVerticalScrollIndicator={true}
