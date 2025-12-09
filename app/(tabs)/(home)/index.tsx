@@ -9,7 +9,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const colors = useThemeColors();
 
-  const handleFindMidpoint = () => {
+  const handleMeetNow = () => {
     router.push('/meet-now');
   };
 
@@ -35,10 +35,10 @@ export default function HomeScreen() {
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-            onPress={handleFindMidpoint}
+            onPress={handleMeetNow}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Find the Midpoint</Text>
+            <Text style={styles.primaryButtonText}>Meet Now</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

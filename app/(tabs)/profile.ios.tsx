@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const USER_STORAGE_KEY = '@midpoint_user';
 
 interface UserData {
-  email: string;
+  email?: string;
   name: string;
   homeArea: string;
   photo?: string;
@@ -61,11 +61,16 @@ export default function ProfileScreen() {
   const saveUserData = async () => {
     try {
       const userData: UserData = {
-        email: email || '',
         name: name || '',
         homeArea: homeArea || '',
         photo: profilePhoto || undefined,
       };
+      
+      // Only include email if it exists
+      if (email) {
+        userData.email = email;
+      }
+      
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
       console.log('Saved user data:', userData);
     } catch (error) {
@@ -74,12 +79,12 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (!name || !homeArea) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!name) {
+      Alert.alert('Error', 'Please enter your name');
       return;
     }
 
-    console.log('Saving profile:', { name, homeArea, profilePhoto });
+    console.log('Saving profile:', { name, email, homeArea, profilePhoto });
     await saveUserData();
     Alert.alert('Success', 'Profile updated successfully!');
     setIsEditing(false);
@@ -110,11 +115,13 @@ export default function ProfileScreen() {
           setProfilePhoto(imageUri);
           // Auto-save photo
           const userData: UserData = {
-            email: email || '',
             name: name || '',
             homeArea: homeArea || '',
             photo: imageUri,
           };
+          if (email) {
+            userData.email = email;
+          }
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
           Alert.alert('Success', 'Profile photo updated!');
         }
@@ -173,13 +180,34 @@ export default function ProfileScreen() {
               </View>
             )}
             <TouchableOpacity
-              style={[styles.editAvatarButton, { backgroundColor: colors.secondary, borderColor: colors.card }]}
+              style={[styles.editAvatarButton, { backgroundColor: colors.primary, borderColor: colors.card }]}
               onPress={handlePickImage}
             >
               <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.email, { color: colors.textSecondary }]}>{email || 'No email'}</Text>
+          
+          <Text style={[styles.userName, { color: colors.text }]}>
+            {name || 'User'}
+          </Text>
+          
+          {homeArea && (
+            <Text style={[styles.homeArea, { color: colors.textSecondary }]}>
+              {homeArea}
+            </Text>
+          )}
+          
+          {email ? (
+            <Text style={[styles.userEmail, { color: colors.textSecondary }]}>
+              {email}
+            </Text>
+          ) : (
+            <TouchableOpacity onPress={() => setIsEditing(true)}>
+              <Text style={[styles.addEmailText, { color: colors.primary }]}>
+                Add email
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -217,6 +245,23 @@ export default function ProfileScreen() {
               />
             ) : (
               <Text style={[styles.fieldValue, { color: colors.text }]}>{homeArea || 'Not set'}</Text>
+            )}
+          </View>
+
+          <View style={styles.fieldContainer}>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            {isEditing ? (
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            ) : (
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{email || 'Not set'}</Text>
             )}
           </View>
         </View>
@@ -274,11 +319,14 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
   header: { alignItems: 'center', marginBottom: 32 },
-  avatarContainer: { position: 'relative', marginBottom: 16 },
+  avatarContainer: { position: 'relative', marginBottom: 20 },
   avatar: { width: 100, height: 100, borderRadius: 50 },
   avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center' },
   editAvatarButton: { position: 'absolute', bottom: 0, right: 0, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 3 },
-  email: { fontSize: 16 },
+  userName: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
+  homeArea: { fontSize: 16, marginBottom: 4 },
+  userEmail: { fontSize: 14 },
+  addEmailText: { fontSize: 14, fontWeight: '600', marginTop: 4 },
   card: { borderRadius: 12, padding: 16, marginBottom: 16, elevation: 3 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   cardTitle: { fontSize: 18, fontWeight: 'bold' },

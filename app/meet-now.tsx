@@ -23,7 +23,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { DOWNLOAD_LINK } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/app/integrations/supabase/client';
-import { v4 as uuidv4 } from 'uuid';
+import { generateId } from '@/utils/idGenerator';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const USER_STORAGE_KEY = '@midpoint_user';
@@ -319,8 +319,8 @@ export default function MeetNowScreen() {
     try {
       setCreatingMeetPoint(true);
 
-      // Generate unique meetPointId
-      const meetPointId = uuidv4();
+      // Generate unique meetPointId using Safari-safe function
+      const meetPointId = generateId();
 
       console.log('Creating MeetPoint:', {
         meetPointId,
@@ -369,7 +369,7 @@ export default function MeetNowScreen() {
       // Subscribe to real-time updates
       subscribeToMeetPoint(meetPointId);
 
-      // Generate share link
+      // Generate proper deep link
       const shareUrl = `${DOWNLOAD_LINK}/meet?meetPointId=${meetPointId}`;
 
       console.log('Generated share URL:', shareUrl);

@@ -397,6 +397,11 @@ export default function MidpointResultsScreen() {
                   {meetPoint.selected_place_address}
                 </Text>
               )}
+              {meetPoint.selected_place_lat && meetPoint.selected_place_lng && (
+                <Text style={[styles.selectedPlaceCoords, { color: colors.textSecondary }]}>
+                  {meetPoint.selected_place_lat.toFixed(4)}, {meetPoint.selected_place_lng.toFixed(4)}
+                </Text>
+              )}
             </View>
           </View>
           <TouchableOpacity
@@ -591,6 +596,11 @@ const styles = StyleSheet.create({
   selectedPlaceAddress: {
     fontSize: 14,
     lineHeight: 18,
+  },
+  selectedPlaceCoords: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: 2,
   },
   mainDirectionsButton: {
     flexDirection: 'row',
