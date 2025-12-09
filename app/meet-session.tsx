@@ -59,6 +59,7 @@ export default function MeetSessionScreen() {
   const colors = useThemeColors();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // Extract meetPointId from URL parameters
   const meetPointId = params?.meetPointId as string;
 
   const [meetPoint, setMeetPoint] = useState<MeetPoint | null>(null);
@@ -66,16 +67,19 @@ export default function MeetSessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
 
-  console.log('[MeetSession] Screen mounted with meetPointId:', meetPointId);
+  console.log('[MeetSession] Screen mounted');
+  console.log('[MeetSession] URL params:', JSON.stringify(params, null, 2));
+  console.log('[MeetSession] meetPointId from params:', meetPointId);
 
   useEffect(() => {
     if (!meetPointId) {
-      console.error('[MeetSession] No meetPointId provided in params');
+      console.error('[MeetSession] ERROR: No meetPointId provided in URL params');
       setError('invalid');
       setLoading(false);
       return;
     }
 
+    console.log('[MeetSession] Valid meetPointId detected, loading MeetPoint...');
     loadMeetPoint();
     subscribeToMeetPoint();
 
@@ -90,7 +94,7 @@ export default function MeetSessionScreen() {
 
   const loadMeetPoint = async () => {
     try {
-      console.log('[MeetSession] Fetching MeetPoint from Supabase:', meetPointId);
+      console.log('[MeetSession] Fetching MeetPoint from Supabase with ID:', meetPointId);
       setLoading(true);
       setError(null);
 

@@ -61,30 +61,31 @@ export default function RootLayout() {
     }
 
     const handleDeepLink = (url: string) => {
-      if (!url) return;
+      if (!url) {
+        console.log("[DeepLink] No URL provided");
+        return;
+      }
 
-      console.log("[DeepLink] Deep link received:", url);
+      console.log("[DeepLink] full URL:", url);
       
       try {
         // Parse the URL to extract query parameters
         const parsed = Linking.parse(url);
-        console.log("[DeepLink] Parsed deep link:", parsed);
+        console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed, null, 2));
         
         // Check for meetPointId in query parameters
         const meetPointId = parsed.queryParams?.meetPointId as string | undefined;
         
         if (meetPointId) {
-          console.log("[DeepLink] MeetPoint ID found in URL:", meetPointId);
+          console.log("[DeepLink] meetPointId detected:", meetPointId);
+          console.log("[DeepLink] navigating to /meet-session");
           
-          // Navigate to the Meet Session screen with the meetPointId
-          // Use a small delay to ensure navigation is ready
-          setTimeout(() => {
-            console.log("[DeepLink] Navigating to /meet-session with meetPointId:", meetPointId);
-            router.push({
-              pathname: '/meet-session',
-              params: { meetPointId },
-            });
-          }, 300);
+          // Immediately navigate to the Meet Session screen with the meetPointId
+          // Use replace to prevent showing the default screen first
+          router.replace({
+            pathname: '/meet-session',
+            params: { meetPointId },
+          });
         } else {
           console.log("[DeepLink] No meetPointId found in URL query parameters");
         }
@@ -99,8 +100,8 @@ export default function RootLayout() {
       
       Linking.getInitialURL()
         .then((url) => {
-          console.log("[DeepLink] Initial URL:", url);
           if (url) {
+            console.log("[DeepLink] Initial URL found:", url);
             handleDeepLink(url);
           } else {
             console.log("[DeepLink] No initial URL found");
@@ -115,7 +116,7 @@ export default function RootLayout() {
 
     // Listen for deep links when app is already open
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log("[DeepLink] Deep link event received:", event);
+      console.log("[DeepLink] Deep link event received");
       if (event?.url) {
         handleDeepLink(event.url);
       }
