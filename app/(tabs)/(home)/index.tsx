@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,40 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function HomeScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const [isRedirecting, setIsRedirecting] = React.useState(false);
+
+  // Web-only redirect for deep links
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const meetPointId = urlParams.get('meetPointId');
+        
+        console.log('[DeepLink] web home search:', window.location.search);
+        
+        if (meetPointId) {
+          console.log(`[DeepLink] redirecting to /meet-session with meetPointId=${meetPointId}`);
+          setIsRedirecting(true);
+          router.replace(`/meet-session?meetPointId=${meetPointId}`);
+          return;
+        }
+      } catch (error) {
+        console.error('[DeepLink] Error parsing URL:', error);
+      }
+    }
+  }, [router]);
+
+  // Show loading view while redirecting
+  if (isRedirecting) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+          Loading Meet Point...
+        </Text>
+      </View>
+    );
+  }
 
   const handleMeetNow = () => {
     router.push('/meet-now');
@@ -147,5 +181,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
   },
 });
