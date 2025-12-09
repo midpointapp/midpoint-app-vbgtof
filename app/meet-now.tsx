@@ -11,7 +11,8 @@ import {
   Linking,
   Modal,
   FlatList,
-  KeyboardAvoidingView
+  KeyboardAvoidingView,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
@@ -19,8 +20,8 @@ import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import * as SMS from 'expo-sms';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-
-const DOWNLOAD_LINK = 'https://midpointapp.yourlink';
+import { calculateMidpoint, searchNearbyPlaces, Place } from '@/utils/locationUtils';
+import { DOWNLOAD_LINK } from '@/constants/config';
 
 const MEETUP_TYPES = [
   { id: 'gas', label: 'Gas stations', icon: 'local-gas-station' as const },
@@ -45,18 +46,6 @@ interface LocationWithAddress {
   address?: string;
 }
 
-interface MidpointResult {
-  latitude: number;
-  longitude: number;
-  contactName: string;
-  suggestedLocation: {
-    name: string;
-    address: string;
-    lat: number;
-    lng: number;
-  };
-}
-
 export default function MeetNowScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -69,8 +58,10 @@ export default function MeetNowScreen() {
   const [myLocation, setMyLocation] = useState<LocationWithAddress | null>(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [midpointResult, setMidpointResult] = useState<MidpointResult | null>(null);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [searchingPlaces, setSearchingPlaces] = useState(false);
+  const [midpointCoords, setMidpointCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     getCurrentLocation();
@@ -179,6 +170,8 @@ export default function MeetNowScreen() {
             ? contact.phoneNumbers[0].number 
             : undefined;
           
+          // Demo coordinates: Generate random location near San Francisco Bay Area
+          // In a real app, this would come from the contact's stored location or their device
           const newContact: SavedContact = {
             id: contact.id || Date.now().toString(),
             name: fullName,
@@ -258,30 +251,7 @@ export default function MeetNowScreen() {
     }
   };
 
-  const generateMockLocation = (midLat: number, midLng: number, type: string) => {
-    const typeLabels: Record<string, string[]> = {
-      gas: ['Shell Gas Station', 'Chevron', '76 Gas Station', 'Arco'],
-      restaurant: ['Starbucks', 'Peet\'s Coffee', 'Blue Bottle Coffee', 'Local Cafe'],
-      police: ['Police Station', 'Sheriff\'s Office', 'Public Safety Office'],
-      rest: ['Rest Area', 'Travel Center', 'Roadside Rest Stop'],
-      public: ['Public Library', 'Community Center', 'City Hall', 'Park'],
-    };
-
-    const names = typeLabels[type] || typeLabels.public;
-    const randomName = names[Math.floor(Math.random() * names.length)];
-    
-    const offsetLat = (Math.random() - 0.5) * 0.01;
-    const offsetLng = (Math.random() - 0.5) * 0.01;
-    
-    return {
-      name: randomName,
-      address: `${Math.floor(Math.random() * 9000 + 1000)} Main St, City, State`,
-      lat: midLat + offsetLat,
-      lng: midLng + offsetLng,
-    };
-  };
-
-  const handleFindMidpoint = () => {
+  const handleFindMidpoint = async () => {
     if (!myLocation) {
       Alert.alert(
         'Location Required',
@@ -314,37 +284,67 @@ export default function MeetNowScreen() {
       return;
     }
 
-    let userLat = myLocation.latitude;
-    let userLng = myLocation.longitude;
+    try {
+      setSearchingPlaces(true);
+      setPlaces([]);
 
-    if (isSafeMode) {
-      userLat = Math.round(userLat * 100) / 100;
-      userLng = Math.round(userLng * 100) / 100;
-      console.log('Safe Meet mode: Using masked location', { userLat, userLng });
+      // Calculate midpoint
+      const { midLat, midLng } = calculateMidpoint(
+        myLocation.latitude,
+        myLocation.longitude,
+        selectedContact.lat,
+        selectedContact.lng,
+        isSafeMode
+      );
+
+      setMidpointCoords({ lat: midLat, lng: midLng });
+
+      console.log('Searching for places near midpoint:', { midLat, midLng, meetupType: selectedMeetupType });
+
+      // Search for nearby places using Google Places API
+      const foundPlaces = await searchNearbyPlaces(midLat, midLng, selectedMeetupType);
+
+      console.log(`Found ${foundPlaces.length} places`);
+
+      if (foundPlaces.length === 0) {
+        Alert.alert(
+          'No Places Found',
+          'No places found near the midpoint. Try selecting a different meetup type or expanding your search area.',
+          [{ text: 'OK' }]
+        );
+        setSearchingPlaces(false);
+        return;
+      }
+
+      setPlaces(foundPlaces);
+      setShowResultModal(true);
+      setSearchingPlaces(false);
+    } catch (error: any) {
+      console.error('Error finding midpoint:', error);
+      setSearchingPlaces(false);
+      
+      let errorMessage = 'Failed to find places. Please try again.';
+      
+      if (error.message) {
+        if (error.message.includes('API key not configured')) {
+          errorMessage = 'Google Places API key not configured. Please add your API key in constants/config.ts to use this feature.';
+        } else if (error.message.includes('API request denied')) {
+          errorMessage = 'Google Places API access denied. Please check your API key and ensure billing is enabled.';
+        } else if (error.message.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      Alert.alert('Error', errorMessage, [{ text: 'OK' }]);
     }
-
-    const midpointLat = (userLat + selectedContact.lat) / 2;
-    const midpointLng = (userLng + selectedContact.lng) / 2;
-
-    const suggestedLocation = generateMockLocation(midpointLat, midpointLng, selectedMeetupType);
-
-    const result: MidpointResult = {
-      latitude: midpointLat,
-      longitude: midpointLng,
-      contactName: selectedContact.name,
-      suggestedLocation,
-    };
-
-    console.log('Midpoint calculated:', result);
-    setMidpointResult(result);
-    setShowResultModal(true);
   };
 
-  const handleOpenInMaps = () => {
-    if (!midpointResult) return;
-
-    const { lat, lng } = midpointResult.suggestedLocation;
-    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  const handleOpenInMaps = (place: Place) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}&query_place_id=${place.placeId || ''}`;
+    
+    console.log('Opening maps for place:', place.name);
     
     Linking.openURL(url).catch((err) => {
       console.error('Error opening maps:', err);
@@ -352,23 +352,54 @@ export default function MeetNowScreen() {
     });
   };
 
-  const renderContactItem = ({ item }: { item: SavedContact }) => (
-    <TouchableOpacity
-      style={styles.contactItem}
-      onPress={() => handleSelectContact(item)}
-      activeOpacity={0.7}
+  const renderPlaceItem = ({ item, index }: { item: Place; index: number }) => (
+    <View 
+      key={item.id}
+      style={[styles.placeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
-      <View style={[styles.contactCircle, { backgroundColor: colors.primary }]}>
-        <Text style={styles.contactInitials}>{item.initials}</Text>
+      <View style={styles.placeHeader}>
+        <View style={styles.placeRank}>
+          <Text style={[styles.placeRankText, { color: colors.primary }]}>#{index + 1}</Text>
+        </View>
+        <View style={styles.placeInfo}>
+          <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+            {item.address}
+          </Text>
+          <View style={styles.placeMetrics}>
+            {item.rating > 0 && (
+              <View style={styles.ratingContainer}>
+                <MaterialIcons name="star" size={16} color="#FFC107" />
+                <Text style={[styles.ratingText, { color: colors.text }]}>
+                  {item.rating.toFixed(1)}
+                </Text>
+              </View>
+            )}
+            <View style={styles.distanceContainer}>
+              <MaterialIcons name="place" size={16} color={colors.textSecondary} />
+              <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
+                {item.distance.toFixed(1)} km
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
-      <Text style={[styles.contactName, { color: colors.text }]} numberOfLines={1}>
-        {item.name}
-      </Text>
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.mapsButton, { backgroundColor: colors.primary }]}
+        onPress={() => handleOpenInMaps(item)}
+        activeOpacity={0.8}
+      >
+        <MaterialIcons name="map" size={20} color="#FFFFFF" />
+        <Text style={styles.mapsButtonText}>Open in Maps</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
     <TouchableOpacity
+      key={item.id}
       style={[
         styles.dropdownItem,
         { backgroundColor: colors.card, borderColor: colors.border }
@@ -533,15 +564,22 @@ export default function MeetNowScreen() {
           style={[
             styles.findButton, 
             { backgroundColor: colors.primary },
-            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType) && styles.findButtonDisabled
+            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || searchingPlaces) && styles.findButtonDisabled
           ]}
           onPress={handleFindMidpoint}
           activeOpacity={0.8}
-          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType}
+          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || searchingPlaces}
         >
-          <Text style={styles.findButtonText}>
-            {isSafeMode ? 'SafeMeet — Hide My Address' : 'Find the MidPoint'}
-          </Text>
+          {searchingPlaces ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color="#FFFFFF" size="small" />
+              <Text style={styles.findButtonText}>Searching...</Text>
+            </View>
+          ) : (
+            <Text style={styles.findButtonText}>
+              {isSafeMode ? 'SafeMeet — Hide My Address' : 'Find the MidPoint'}
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -593,50 +631,38 @@ export default function MeetNowScreen() {
                 <MaterialIcons name="check-circle" size={48} color={colors.success} />
               </View>
               
-              <Text style={[styles.resultTitle, { color: colors.text }]}>Midpoint Found!</Text>
+              <Text style={[styles.resultTitle, { color: colors.text }]}>
+                {places.length} Place{places.length !== 1 ? 's' : ''} Found!
+              </Text>
               
-              {midpointResult && (
-                <>
-                  <View style={styles.resultInfo}>
-                    <View style={styles.resultRow}>
-                      <MaterialIcons name="person" size={20} color={colors.textSecondary} />
-                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Meeting with:</Text>
-                      <Text style={[styles.resultValue, { color: colors.text }]}>{midpointResult.contactName}</Text>
-                    </View>
-                    
-                    <View style={styles.resultRow}>
-                      <MaterialIcons name="place" size={20} color={colors.textSecondary} />
-                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Location:</Text>
-                      <Text style={[styles.resultValue, { color: colors.text }]}>{midpointResult.suggestedLocation.name}</Text>
-                    </View>
-                    
-                    <View style={styles.resultRow}>
-                      <MaterialIcons name="location-on" size={20} color={colors.textSecondary} />
-                      <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>Address:</Text>
-                      <Text style={[styles.resultValue, { color: colors.text }]} numberOfLines={2}>
-                        {midpointResult.suggestedLocation.address}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <TouchableOpacity
-                    style={[styles.mapsButton, { backgroundColor: colors.primary }]}
-                    onPress={handleOpenInMaps}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialIcons name="map" size={24} color="#FFFFFF" />
-                    <Text style={styles.mapsButtonText}>Open in Maps</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.closeButton, { borderColor: colors.border }]}
-                    onPress={() => setShowResultModal(false)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
-                  </TouchableOpacity>
-                </>
+              {selectedContact && (
+                <Text style={[styles.resultSubtitle, { color: colors.textSecondary }]}>
+                  Meeting with {selectedContact.name}
+                </Text>
               )}
+
+              {midpointCoords && (
+                <Text style={[styles.midpointCoords, { color: colors.textSecondary }]}>
+                  Midpoint: {midpointCoords.lat.toFixed(4)}, {midpointCoords.lng.toFixed(4)}
+                </Text>
+              )}
+
+              <FlatList
+                data={places}
+                renderItem={renderPlaceItem}
+                keyExtractor={(item) => item.id}
+                style={styles.placesList}
+                contentContainerStyle={styles.placesListContent}
+                showsVerticalScrollIndicator={true}
+              />
+
+              <TouchableOpacity
+                style={[styles.closeButton, { borderColor: colors.border }]}
+                onPress={() => setShowResultModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -768,28 +794,6 @@ const styles = StyleSheet.create({
   contactSelectorContainer: {
     gap: 12,
   },
-  contactItem: {
-    alignItems: 'center',
-    gap: 8,
-    width: 80,
-    marginRight: 16,
-  },
-  contactCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactInitials: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  contactName: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
   pickContactButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -886,6 +890,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   resultModalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -898,6 +907,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
+    maxHeight: '80%',
     boxShadow: '0px -4px 20px rgba(0, 0, 0, 0.15)',
     elevation: 10,
   },
@@ -925,41 +935,93 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 8,
   },
-  resultInfo: {
-    gap: 16,
-    marginBottom: 24,
+  resultSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  resultRow: {
+  midpointCoords: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  placesList: {
+    maxHeight: 400,
+  },
+  placesListContent: {
+    paddingBottom: 16,
+  },
+  placeCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  placeHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+    gap: 12,
   },
-  resultLabel: {
+  placeRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(63, 81, 181, 0.1)',
+  },
+  placeRankText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  placeInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  placeName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  placeAddress: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  placeMetrics: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 4,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
     fontSize: 14,
     fontWeight: '600',
-    minWidth: 80,
   },
-  resultValue: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  distanceText: {
+    fontSize: 14,
   },
   mapsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 12,
-    boxShadow: '0px 4px 12px rgba(63, 81, 181, 0.3)',
-    elevation: 4,
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
   },
   mapsButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
   },
   closeButton: {
@@ -967,6 +1029,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     alignItems: 'center',
+    marginTop: 8,
   },
   closeButtonText: {
     fontSize: 16,

@@ -1,8 +1,15 @@
-
 import React from 'react';
 import { Stack } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Dimensions, useColorScheme } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Dimensions,
+  useColorScheme,
+} from 'react-native';
+import { useRouter, usePathname, Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import Animated, {
@@ -12,7 +19,6 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Href } from 'expo-router';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -51,7 +57,10 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
         score = 80;
       } else if (pathname.includes(tab.name)) {
         score = 60;
-      } else if (tab.route.includes('/(tabs)/') && pathname.includes(tab.route.split('/(tabs)/')[1])) {
+      } else if (
+        (tab.route as string).includes('/(tabs)/') &&
+        pathname.includes((tab.route as string).split('/(tabs)/')[1])
+      ) {
         score = 40;
       }
 
@@ -108,13 +117,20 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
               borderColor: colors.border,
               ...Platform.select({
                 ios: {
-                  backgroundColor: isDark ? 'rgba(33, 33, 33, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                  backgroundColor: isDark
+                    ? 'rgba(33, 33, 33, 0.9)'
+                    : 'rgba(255, 255, 255, 0.9)',
                 },
                 android: {
-                  backgroundColor: isDark ? 'rgba(33, 33, 33, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                  backgroundColor: isDark
+                    ? 'rgba(33, 33, 33, 0.95)'
+                    : 'rgba(255, 255, 255, 0.95)',
                 },
                 web: {
-                  backgroundColor: isDark ? 'rgba(33, 33, 33, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                  backgroundColor: isDark
+                    ? 'rgba(33, 33, 33, 0.95)'
+                    : 'rgba(255, 255, 255, 0.95)',
+                  // @ts-ignore web-only style
                   backdropFilter: 'blur(10px)',
                 },
               }),
@@ -154,7 +170,10 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
                       style={[
                         styles.tabLabel,
                         { color: colors.textSecondary },
-                        isActive && { color: colors.primary, fontWeight: '600' },
+                        isActive && {
+                          color: colors.primary,
+                          fontWeight: '600',
+                        },
                       ]}
                     >
                       {tab.label}
@@ -179,12 +198,6 @@ export default function TabLayout() {
       label: 'Home',
     },
     {
-      name: 'sessions',
-      route: '/(tabs)/sessions',
-      icon: 'list',
-      label: 'Sessions',
-    },
-    {
       name: 'profile',
       route: '/(tabs)/profile',
       icon: 'person',
@@ -201,7 +214,6 @@ export default function TabLayout() {
         }}
       >
         <Stack.Screen key="home" name="(home)" />
-        <Stack.Screen key="sessions" name="sessions" />
         <Stack.Screen key="profile" name="profile" />
       </Stack>
       <FloatingTabBar tabs={tabs} />
