@@ -63,59 +63,59 @@ export default function RootLayout() {
     const handleDeepLink = (url: string) => {
       if (!url) return;
 
-      console.log("Deep link received:", url);
+      console.log("[DeepLink] Deep link received:", url);
       
       try {
         // Parse the URL to extract query parameters
         const parsed = Linking.parse(url);
-        console.log("Parsed deep link:", parsed);
+        console.log("[DeepLink] Parsed deep link:", parsed);
         
         // Check for meetPointId in query parameters
         const meetPointId = parsed.queryParams?.meetPointId as string | undefined;
         
         if (meetPointId) {
-          console.log("MeetPoint ID found in URL:", meetPointId);
+          console.log("[DeepLink] MeetPoint ID found in URL:", meetPointId);
           
-          // Navigate to the meet screen with the meetPointId
+          // Navigate to the Meet Session screen with the meetPointId
           // Use a small delay to ensure navigation is ready
           setTimeout(() => {
-            console.log("Navigating to /meet with meetPointId:", meetPointId);
+            console.log("[DeepLink] Navigating to /meet-session with meetPointId:", meetPointId);
             router.push({
-              pathname: '/meet',
+              pathname: '/meet-session',
               params: { meetPointId },
             });
           }, 300);
         } else {
-          console.log("No meetPointId found in URL query parameters");
+          console.log("[DeepLink] No meetPointId found in URL query parameters");
         }
       } catch (error) {
-        console.error("Error parsing deep link:", error);
+        console.error("[DeepLink] Error parsing deep link:", error);
       }
     };
 
     // Handle initial URL if app was opened via deep link
     if (!initialUrlProcessed) {
-      console.log("Checking for initial URL...");
+      console.log("[DeepLink] Checking for initial URL...");
       
       Linking.getInitialURL()
         .then((url) => {
-          console.log("Initial URL:", url);
+          console.log("[DeepLink] Initial URL:", url);
           if (url) {
             handleDeepLink(url);
           } else {
-            console.log("No initial URL found");
+            console.log("[DeepLink] No initial URL found");
           }
           setInitialUrlProcessed(true);
         })
         .catch((error) => {
-          console.error("Error getting initial URL:", error);
+          console.error("[DeepLink] Error getting initial URL:", error);
           setInitialUrlProcessed(true);
         });
     }
 
     // Listen for deep links when app is already open
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log("Deep link event received:", event);
+      console.log("[DeepLink] Deep link event received:", event);
       if (event?.url) {
         handleDeepLink(event.url);
       }
@@ -182,6 +182,12 @@ export default function RootLayout() {
               />
               <Stack.Screen
                 name="meet"
+                options={{
+                  headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="meet-session"
                 options={{
                   headerShown: false,
                 }}
