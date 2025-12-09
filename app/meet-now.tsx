@@ -114,6 +114,7 @@ export default function MeetNowScreen() {
   // Session view state
   const [sessionMeetPoint, setSessionMeetPoint] = useState<MeetPoint | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionPlaces, setSessionPlaces] = useState<Place[]>([]);
   const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
 
@@ -140,12 +141,12 @@ export default function MeetNowScreen() {
   // Check for meetPointId in URL on mount (especially for web)
   useEffect(() => {
     const checkForMeetPointId = () => {
-      // First check URL params
+      // First check URL params from expo-router
       if (params?.meetPointId) {
         const meetPointId = Array.isArray(params.meetPointId) 
           ? params.meetPointId[0] 
           : params.meetPointId;
-        console.log('[MeetNow] detected meetPointId from params:', meetPointId);
+        console.log('[MeetNow] detected meetPointId from URL:', meetPointId);
         setSessionMeetPointId(meetPointId);
         setIsSessionMode(true);
         return;
@@ -156,7 +157,7 @@ export default function MeetNowScreen() {
         const searchParams = new URLSearchParams(window.location.search);
         const meetPointId = searchParams.get('meetPointId');
         if (meetPointId) {
-          console.log('[MeetNow] detected meetPointId from window.location:', meetPointId);
+          console.log('[MeetNow] detected meetPointId from URL:', meetPointId);
           setSessionMeetPointId(meetPointId);
           setIsSessionMode(true);
           return;
@@ -181,6 +182,7 @@ export default function MeetNowScreen() {
   const loadSessionMeetPoint = async (meetPointId: string) => {
     try {
       setSessionLoading(true);
+      setSessionError(null);
       console.log('[MeetNow] Loading session meet point:', meetPointId);
 
       // Fetch meet point from Supabase
@@ -192,9 +194,7 @@ export default function MeetNowScreen() {
 
       if (error || !data) {
         console.error('[MeetNow] Error loading meet point:', error);
-        Alert.alert('Error', 'Meet Point not found', [
-          { text: 'OK', onPress: () => router.replace('/') }
-        ]);
+        setSessionError('This meet link is invalid or expired.');
         setSessionLoading(false);
         return;
       }
@@ -215,7 +215,7 @@ export default function MeetNowScreen() {
       setSessionLoading(false);
     } catch (error) {
       console.error('[MeetNow] Error in loadSessionMeetPoint:', error);
-      Alert.alert('Error', 'Failed to load Meet Point');
+      setSessionError('Failed to load Meet Point');
       setSessionLoading(false);
     }
   };
@@ -891,7 +891,7 @@ export default function MeetNowScreen() {
     const isSelected = sessionMeetPoint?.selected_place_id === item.id;
 
     return (
-      <View
+      <TouchableOpacity
         key={item?.id || `place-${index}`}
         style={[
           styles.sessionPlaceCard,
@@ -901,6 +901,8 @@ export default function MeetNowScreen() {
             borderWidth: isSelected ? 3 : 1,
           }
         ]}
+        onPress={() => handleSelectPlace(item)}
+        activeOpacity={0.7}
       >
         {isSelected && (
           <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
@@ -945,7 +947,7 @@ export default function MeetNowScreen() {
           <MaterialIcons name="directions" size={20} color="#FFFFFF" />
           <Text style={styles.directionsButtonText}>Get Directions</Text>
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -960,11 +962,16 @@ export default function MeetNowScreen() {
       );
     }
 
-    if (!sessionMeetPoint) {
+    if (sessionError || !sessionMeetPoint) {
       return (
         <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
           <MaterialIcons name="error-outline" size={64} color={colors.error} />
-          <Text style={[styles.errorText, { color: colors.text }]}>Meet Point not found</Text>
+          <Text style={[styles.errorTitle, { color: colors.text }]}>
+            {sessionError || 'This meet link is invalid or expired.'}
+          </Text>
+          <Text style={[styles.errorSubtitle, { color: colors.textSecondary }]}>
+            The Meet Point you&apos;re trying to access could not be found or has expired.
+          </Text>
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: colors.primary }]}
             onPress={() => router.replace('/')}
@@ -1234,7 +1241,7 @@ export default function MeetNowScreen() {
           disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint}
         >
           {creatingMeetPoint ? (
-            <View style={styles.loadingContainer}>
+            <View style={styles.loadingButtonContainer}>
               <ActivityIndicator color="#FFFFFF" size="small" />
               <Text style={styles.createButtonText}>Creating...</Text>
             </View>
@@ -1373,17 +1380,29 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
+  loadingButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
-  errorText: {
+  errorTitle: {
     marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 22,
   },
   backButton: {
     paddingVertical: 12,
