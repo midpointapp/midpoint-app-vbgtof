@@ -54,7 +54,7 @@ export default function RootLayout() {
     }
   }, [networkState.isConnected, networkState.isInternetReachable]);
 
-  // Handle deep links with meetPointId query parameter
+  // Handle deep links - let the target screen handle the meetPointId
   useEffect(() => {
     if (!appReady) {
       return;
@@ -69,7 +69,7 @@ export default function RootLayout() {
       console.log("[DeepLink] full URL:", url);
       
       try {
-        // Parse the URL to extract query parameters
+        // Parse the URL to extract path and query parameters
         const parsed = Linking.parse(url);
         console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed, null, 2));
         
@@ -78,16 +78,23 @@ export default function RootLayout() {
         
         if (meetPointId) {
           console.log("[DeepLink] meetPointId detected:", meetPointId);
-          console.log("[DeepLink] navigating to /meet-session");
           
-          // Immediately navigate to the Meet Session screen with the meetPointId
-          // Use replace to prevent showing the default screen first
-          router.replace({
-            pathname: '/meet-session',
+          // Navigate to /meet-now with the meetPointId parameter
+          // The meet-now screen will handle switching to session mode
+          console.log("[DeepLink] navigating to /meet-now with meetPointId");
+          
+          router.push({
+            pathname: '/meet-now',
             params: { meetPointId },
           });
         } else {
           console.log("[DeepLink] No meetPointId found in URL query parameters");
+          
+          // If there's a path but no meetPointId, navigate to that path
+          if (parsed.path) {
+            console.log("[DeepLink] navigating to path:", parsed.path);
+            router.push(parsed.path as any);
+          }
         }
       } catch (error) {
         console.error("[DeepLink] Error parsing deep link:", error);

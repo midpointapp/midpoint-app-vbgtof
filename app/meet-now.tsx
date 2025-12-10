@@ -146,7 +146,7 @@ export default function MeetNowScreen() {
         const meetPointId = Array.isArray(params.meetPointId) 
           ? params.meetPointId[0] 
           : params.meetPointId;
-        console.log('[MeetNow] detected meetPointId from URL:', meetPointId);
+        console.log('[MeetNow] detected meetPointId from URL params:', meetPointId);
         setSessionMeetPointId(meetPointId);
         setIsSessionMode(true);
         return;
@@ -157,7 +157,7 @@ export default function MeetNowScreen() {
         const searchParams = new URLSearchParams(window.location.search);
         const meetPointId = searchParams.get('meetPointId');
         if (meetPointId) {
-          console.log('[MeetNow] detected meetPointId from URL:', meetPointId);
+          console.log('[MeetNow] detected meetPointId from window.location.search:', meetPointId);
           setSessionMeetPointId(meetPointId);
           setIsSessionMode(true);
           return;
@@ -200,15 +200,32 @@ export default function MeetNowScreen() {
       }
 
       console.log('[MeetNow] Meet point loaded:', data);
-      setSessionMeetPoint(data as MeetPoint);
+      const meetPoint = data as MeetPoint;
+      setSessionMeetPoint(meetPoint);
+
+      // Check if already ready (both users joined and midpoint calculated)
+      if (meetPoint.status === 'ready' && meetPoint.midpoint_lat && meetPoint.midpoint_lng) {
+        console.log('[MeetNow] Meet point is already ready, displaying results');
+        
+        // Load places from hotspot_results
+        if (meetPoint.hotspot_results && Array.isArray(meetPoint.hotspot_results)) {
+          setSessionPlaces(meetPoint.hotspot_results);
+        }
+        
+        // Reverse geocode midpoint
+        await reverseGeocodeMidpoint(meetPoint.midpoint_lat, meetPoint.midpoint_lng);
+        
+        setSessionLoading(false);
+        return;
+      }
 
       // Check if we need to add this device's location
-      const meetPoint = data as MeetPoint;
       if (!meetPoint.receiver_lat || !meetPoint.receiver_lng) {
         console.log('[MeetNow] Receiver location not set, capturing current location...');
         await captureAndUpdateReceiverLocation(meetPointId, meetPoint);
-      } else {
-        // Both locations are set, calculate midpoint and search places
+      } else if (meetPoint.status === 'joined') {
+        // Both locations are set but not yet calculated, calculate midpoint and search places
+        console.log('[MeetNow] Both users joined, calculating midpoint...');
         await calculateAndSearchPlaces(meetPoint);
       }
 
@@ -217,6 +234,29 @@ export default function MeetNowScreen() {
       console.error('[MeetNow] Error in loadSessionMeetPoint:', error);
       setSessionError('Failed to load Meet Point');
       setSessionLoading(false);
+    }
+  };
+
+  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+      
+      if (results && results.length > 0) {
+        const address = results[0];
+        const parts = [
+          address?.streetNumber,
+          address?.street,
+          address?.city,
+          address?.region,
+          address?.postalCode,
+        ].filter(Boolean);
+        
+        const formattedAddress = parts.join(', ');
+        console.log('[MeetNow] Midpoint address:', formattedAddress);
+        setMidpointAddress(formattedAddress || null);
+      }
+    } catch (error) {
+      console.error('[MeetNow] Error reverse geocoding:', error);
     }
   };
 
@@ -311,27 +351,7 @@ export default function MeetNowScreen() {
       console.log('[MeetNow] Midpoint calculated:', { midLat, midLng });
 
       // Reverse geocode midpoint
-      try {
-        const results = await Location.reverseGeocodeAsync({ 
-          latitude: midLat, 
-          longitude: midLng 
-        });
-        if (results && results.length > 0) {
-          const address = results[0];
-          const parts = [
-            address?.streetNumber,
-            address?.street,
-            address?.city,
-            address?.region,
-            address?.postalCode,
-          ].filter(Boolean);
-          const formattedAddress = parts.join(', ');
-          console.log('[MeetNow] Midpoint address:', formattedAddress);
-          setMidpointAddress(formattedAddress || null);
-        }
-      } catch (error) {
-        console.error('[MeetNow] Error reverse geocoding:', error);
-      }
+      await reverseGeocodeMidpoint(midLat, midLng);
 
       // Search for nearby places
       const places = await searchNearbyPlaces(midLat, midLng, meetPoint.type);
@@ -679,8 +699,8 @@ export default function MeetNowScreen() {
         return;
       }
 
-      // Build the share URL explicitly
-      const shareUrl = "https://web-midpoint-app-vbgtof.natively.dev/meet-now?meetPointId=" + meetPointId;
+      // Build the share URL using the helper function
+      const shareUrl = generateShareUrl(meetPointId);
       console.log("[Invite] FINAL SMS link:", shareUrl);
 
       // Subscribe to real-time updates
@@ -982,55 +1002,67 @@ export default function MeetNowScreen() {
       );
     }
 
-    // Show waiting state if not ready
-    if (sessionMeetPoint.status !== 'ready') {
+    // Show waiting state ONLY if status is 'link_sent' (waiting for receiver to join)
+    if (sessionMeetPoint.status === 'link_sent') {
       return (
         <View style={[styles.waitingContainer, { backgroundColor: colors.background }]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.waitingTitle, { color: colors.text }]}>
-            {sessionMeetPoint.status === 'link_sent'
-              ? 'Waiting for the other person to join...'
-              : 'Calculating midpoint...'}
+            Waiting for the other person to join...
           </Text>
           <Text style={[styles.waitingSubtitle, { color: colors.textSecondary }]}>
-            This will update automatically when ready
+            This will update automatically when they open the link
           </Text>
         </View>
       );
     }
 
-    // Render session view
+    // If status is 'joined' or 'ready', show the session view immediately
+    // (even if midpoint calculation is still in progress)
     return (
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={[styles.successBanner, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
-          <MaterialIcons name="check-circle" size={32} color={colors.success} />
-          <Text style={[styles.successText, { color: colors.success }]}>
-            Your Meet Point is ready!
-          </Text>
-        </View>
+        {sessionMeetPoint.status === 'ready' && (
+          <View style={[styles.successBanner, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
+            <MaterialIcons name="check-circle" size={32} color={colors.success} />
+            <Text style={[styles.successText, { color: colors.success }]}>
+              Your Meet Point is ready!
+            </Text>
+          </View>
+        )}
+
+        {sessionMeetPoint.status === 'joined' && (
+          <View style={[styles.waitingBanner, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.waitingBannerText, { color: colors.primary }]}>
+              Calculating midpoint and searching for places...
+            </Text>
+          </View>
+        )}
 
         <Text style={[styles.title, { color: colors.text }]}>Meet Point Session</Text>
 
-        {/* Midpoint Info */}
-        <View style={[styles.midpointCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.midpointHeader}>
-            <MaterialIcons name="place" size={32} color={colors.primary} />
-            <Text style={[styles.midpointTitle, { color: colors.text }]}>Midpoint Location</Text>
-          </View>
+        {/* Midpoint Info - only show if calculated */}
+        {sessionMeetPoint.midpoint_lat && sessionMeetPoint.midpoint_lng && (
+          <View style={[styles.midpointCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.midpointHeader}>
+              <MaterialIcons name="place" size={32} color={colors.primary} />
+              <Text style={[styles.midpointTitle, { color: colors.text }]}>Midpoint Location</Text>
+            </View>
 
-          {midpointAddress && (
-            <Text style={[styles.midpointAddress, { color: colors.text }]} numberOfLines={2}>
-              {midpointAddress}
+            {midpointAddress && (
+              <Text style={[styles.midpointAddress, { color: colors.text }]} numberOfLines={2}>
+                {midpointAddress}
+              </Text>
+            )}
+
+            <Text style={[styles.midpointCoords, { color: colors.textSecondary }]}>
+              {sessionMeetPoint.midpoint_lat?.toFixed(4)}, {sessionMeetPoint.midpoint_lng?.toFixed(4)}
             </Text>
-          )}
-
-          <Text style={[styles.midpointCoords, { color: colors.textSecondary }]}>
-            {sessionMeetPoint.midpoint_lat?.toFixed(4)}, {sessionMeetPoint.midpoint_lng?.toFixed(4)}
-          </Text>
-        </View>
+          </View>
+        )}
 
         {/* Map Placeholder */}
         <View style={[styles.mapPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -1061,7 +1093,9 @@ export default function MeetNowScreen() {
             <View style={[styles.noPlacesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <MaterialIcons name="info-outline" size={48} color={colors.textSecondary} />
               <Text style={[styles.noPlacesText, { color: colors.textSecondary }]}>
-                No places found near the midpoint
+                {sessionMeetPoint.status === 'joined' 
+                  ? 'Searching for places near the midpoint...'
+                  : 'No places found near the midpoint'}
               </Text>
             </View>
           )}
