@@ -28,6 +28,7 @@ import { supabase } from '@/app/integrations/supabase/client';
 import { generateId } from '@/utils/idGenerator';
 import { calculateMidpoint, searchNearbyPlaces } from '@/utils/locationUtils';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import * as Clipboard from 'expo-clipboard';
 
 const USER_STORAGE_KEY = '@midpoint_user';
 
@@ -712,82 +713,26 @@ export default function MeetNowScreen() {
       // Log the final SMS body before sending
       console.log("[Invite] FINAL SMS body:", message);
 
-      // Check if we have a phone number and SMS is available
-      const hasSMS = await SMS.isAvailableAsync();
-      const hasPhoneNumber = selectedContact.phoneNumber && selectedContact.phoneNumber.trim().length > 0;
-
-      if (hasSMS && hasPhoneNumber) {
-        // Show options: SMS or Share Link
-        Alert.alert(
-          'Share Meet Point',
-          'How would you like to share the Meet Point?',
-          [
-            {
-              text: 'Send SMS',
-              onPress: async () => {
-                try {
-                  console.log('[Invite] Sending SMS to:', selectedContact.phoneNumber);
-                  
-                  const { result } = await SMS.sendSMSAsync(
-                    [selectedContact.phoneNumber!],
-                    message
-                  );
-                  console.log('SMS result:', result);
-                  setCreatingMeetPoint(false);
-                  
-                  if (result === 'sent') {
-                    Alert.alert(
-                      'Invite Sent!',
-                      'Your Meet Point invite has been sent via SMS. You\'ll be notified when they open it.',
-                      [{ text: 'OK' }]
-                    );
-                  }
-                } catch (error) {
-                  console.error('Error sending SMS:', error);
-                  Alert.alert('Error', 'Failed to send SMS. Please try again.');
-                  setCreatingMeetPoint(false);
-                }
-              },
-            },
-            {
-              text: 'Share Link',
-              onPress: async () => {
-                try {
-                  console.log('[Invite] Sharing link');
-                  
-                  const shareResult = await Share.share({
-                    message: message,
-                    title: 'MidPoint Meet Invite',
-                  });
-
-                  console.log('Share result:', shareResult);
-                  setCreatingMeetPoint(false);
-
-                  if (shareResult.action === Share.sharedAction) {
-                    Alert.alert(
-                      'Invite Sent!',
-                      'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
-                      [{ text: 'OK' }]
-                    );
-                  }
-                } catch (error) {
-                  console.error('Error sharing:', error);
-                  Alert.alert('Error', 'Failed to share link. Please try again.');
-                  setCreatingMeetPoint(false);
-                }
-              },
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => setCreatingMeetPoint(false),
-            },
-          ]
-        );
-      } else {
-        // Only Share Link option available
+      // Cross-platform share handling
+      if (Platform.OS === 'web') {
+        // Web: Copy to clipboard and show alert
         try {
-          console.log('[Invite] Sharing link');
+          await Clipboard.setStringAsync(shareUrl);
+          Alert.alert(
+            'Link Copied!',
+            'The Meet Point invite link has been copied to your clipboard. Paste it in a message to share with your contact.',
+            [{ text: 'OK' }]
+          );
+          setCreatingMeetPoint(false);
+        } catch (error) {
+          console.error('[Invite] Error copying to clipboard:', error);
+          Alert.alert('Error', 'Failed to copy link. Please try again.');
+          setCreatingMeetPoint(false);
+        }
+      } else {
+        // iOS/Android: Use Share API
+        try {
+          console.log('[Invite] Using Share API');
           
           const shareResult = await Share.share({
             message: message,
@@ -798,16 +743,16 @@ export default function MeetNowScreen() {
           setCreatingMeetPoint(false);
 
           if (shareResult.action === Share.sharedAction) {
-            Alert.alert(
-              'Invite Sent!',
-              'Your Meet Point invite has been shared. You\'ll be notified when they open it.',
-              [{ text: 'OK' }]
-            );
+            // User shared successfully - stay on the screen or show waiting state
+            console.log('[Invite] Share completed successfully');
+          } else if (shareResult.action === Share.dismissedAction) {
+            // User dismissed the share sheet
+            console.log('[Invite] Share dismissed');
           }
         } catch (error) {
           console.error('Error sharing:', error);
-          setCreatingMeetPoint(false);
           Alert.alert('Error', 'Failed to share link. Please try again.');
+          setCreatingMeetPoint(false);
         }
       }
     } catch (error: any) {
@@ -886,9 +831,9 @@ export default function MeetNowScreen() {
     });
   };
 
-  const renderMeetupTypeItem = ({ item }: { item: typeof MEETUP_TYPES[0] }) => (
+  const renderMeetupTypeItem = ({ item, index }: { item: typeof MEETUP_TYPES[0]; index: number }) => (
     <TouchableOpacity
-      key={item?.id}
+      key={item?.id || `meetup-type-${index}`}
       style={[
         styles.dropdownItem,
         { backgroundColor: colors.card, borderColor: colors.border }
@@ -1309,7 +1254,7 @@ export default function MeetNowScreen() {
             <FlatList
               data={MEETUP_TYPES}
               renderItem={renderMeetupTypeItem}
-              keyExtractor={(item) => item?.id || 'unknown'}
+              keyExtractor={(item, index) => item?.id || `meetup-type-${index}`}
               contentContainerStyle={styles.dropdownList}
             />
           </View>
