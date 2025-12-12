@@ -1,35 +1,49 @@
 
 import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const colors = useThemeColors();
   const [isRedirecting, setIsRedirecting] = React.useState(false);
 
-  // Web-only redirect for deep links
+  // Auto-route to Meet Now flow if meetPointId is present in URL
   useEffect(() => {
-    if (Platform.OS === 'web') {
+    // Check URL params from expo-router
+    if (params?.meetPointId) {
+      const meetPointId = Array.isArray(params.meetPointId) 
+        ? params.meetPointId[0] 
+        : params.meetPointId;
+      
+      console.log('[Home] meetPointId detected from params:', meetPointId);
+      setIsRedirecting(true);
+      router.replace(`/meet-now?meetPointId=${meetPointId}`);
+      return;
+    }
+
+    // On web, also check window.location.search
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const meetPointId = urlParams.get('meetPointId');
         
-        console.log('[DeepLink] web home search:', window.location.search);
+        console.log('[Home] web search params:', window.location.search);
         
         if (meetPointId) {
-          console.log(`[DeepLink] redirecting to /meet-now with meetPointId=${meetPointId}`);
+          console.log('[Home] meetPointId detected from window.location:', meetPointId);
           setIsRedirecting(true);
           router.replace(`/meet-now?meetPointId=${meetPointId}`);
           return;
         }
       } catch (error) {
-        console.error('[DeepLink] Error parsing URL:', error);
+        console.error('[Home] Error parsing URL:', error);
       }
     }
-  }, [router]);
+  }, [params, router]);
 
   // Show loading view while redirecting
   if (isRedirecting) {
