@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "MidPoint Meet",
@@ -35,7 +36,8 @@
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
       "expo-font",
