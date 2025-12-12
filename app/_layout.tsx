@@ -54,7 +54,7 @@ export default function RootLayout() {
     }
   }, [networkState.isConnected, networkState.isInternetReachable]);
 
-  // Handle deep links - let the target screen handle the meetPointId
+  // Handle deep links - simplified to just log and let Expo Router handle routing
   useEffect(() => {
     if (!appReady) {
       return;
@@ -66,38 +66,20 @@ export default function RootLayout() {
         return;
       }
 
-      console.log("[DeepLink] full URL:", url);
+      console.log("[DeepLink] Received URL:", url);
       
       try {
         // Parse the URL to extract path and query parameters
         const parsed = Linking.parse(url);
-        console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed, null, 2));
+        console.log("[DeepLink] Parsed:", JSON.stringify(parsed, null, 2));
         
-        // Check for meetPointId in query parameters
-        const meetPointId = parsed.queryParams?.meetPointId as string | undefined;
-        
-        if (meetPointId) {
-          console.log("[DeepLink] meetPointId detected:", meetPointId);
-          
-          // Navigate to /meet-now with the meetPointId parameter
-          // The meet-now screen will handle switching to session mode
-          console.log("[DeepLink] navigating to /meet-now with meetPointId");
-          
-          router.push({
-            pathname: '/meet-now',
-            params: { meetPointId },
-          });
-        } else {
-          console.log("[DeepLink] No meetPointId found in URL query parameters");
-          
-          // If there's a path but no meetPointId, navigate to that path
-          if (parsed.path) {
-            console.log("[DeepLink] navigating to path:", parsed.path);
-            router.push(parsed.path as any);
-          }
+        // Expo Router will automatically handle the routing based on the URL
+        // We just log for debugging purposes
+        if (parsed.queryParams?.meetPointId) {
+          console.log("[DeepLink] meetPointId detected:", parsed.queryParams.meetPointId);
         }
       } catch (error) {
-        console.error("[DeepLink] Error parsing deep link:", error);
+        console.error("[DeepLink] Error parsing URL:", error);
       }
     };
 

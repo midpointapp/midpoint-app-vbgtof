@@ -20,9 +20,9 @@ export default function HomeScreen() {
         console.log('[DeepLink] web home search:', window.location.search);
         
         if (meetPointId) {
-          console.log(`[DeepLink] redirecting to /meet-session with meetPointId=${meetPointId}`);
+          console.log(`[DeepLink] redirecting to /meet-now with meetPointId=${meetPointId}`);
           setIsRedirecting(true);
-          router.replace(`/meet-session?meetPointId=${meetPointId}`);
+          router.replace(`/meet-now?meetPointId=${meetPointId}`);
           return;
         }
       } catch (error) {
