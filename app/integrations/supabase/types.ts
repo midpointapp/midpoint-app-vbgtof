@@ -78,6 +78,47 @@ export type Database = {
           updated_at?: string
         }
       }
+      meet_sessions: {
+        Row: {
+          id: string
+          type: string
+          sender_lat: number
+          sender_lng: number
+          receiver_lat: number | null
+          receiver_lng: number | null
+          radius_meters: number
+          results_json: Json
+          selected_place_id: string | null
+          status: 'pending' | 'receiver_joined' | 'selected'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          type: string
+          sender_lat: number
+          sender_lng: number
+          receiver_lat?: number | null
+          receiver_lng?: number | null
+          radius_meters?: number
+          results_json?: Json
+          selected_place_id?: string | null
+          status?: 'pending' | 'receiver_joined' | 'selected'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          type?: string
+          sender_lat?: number
+          sender_lng?: number
+          receiver_lat?: number | null
+          receiver_lng?: number | null
+          radius_meters?: number
+          results_json?: Json
+          selected_place_id?: string | null
+          status?: 'pending' | 'receiver_joined' | 'selected'
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

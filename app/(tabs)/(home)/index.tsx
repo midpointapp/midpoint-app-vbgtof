@@ -12,8 +12,21 @@ export default function HomeScreen() {
   const [isRedirecting, setIsRedirecting] = React.useState(false);
 
   // Auto-route to Meet Now flow if meetPointId is present in URL
+  // Auto-route to Session flow if sessionId is present in URL
   useEffect(() => {
-    // Check URL params from expo-router
+    // Check for sessionId first
+    if (params?.sessionId) {
+      const sessionId = Array.isArray(params.sessionId) 
+        ? params.sessionId[0] 
+        : params.sessionId;
+      
+      console.log('[Home] sessionId detected from params:', sessionId);
+      setIsRedirecting(true);
+      router.replace(`/session?sessionId=${sessionId}`);
+      return;
+    }
+
+    // Check URL params from expo-router for meetPointId
     if (params?.meetPointId) {
       const meetPointId = Array.isArray(params.meetPointId) 
         ? params.meetPointId[0] 
@@ -29,10 +42,18 @@ export default function HomeScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
+        
+        // Check for sessionId
+        const sessionId = urlParams.get('sessionId');
+        if (sessionId) {
+          console.log('[Home] sessionId detected from window.location:', sessionId);
+          setIsRedirecting(true);
+          router.replace(`/session?sessionId=${sessionId}`);
+          return;
+        }
+
+        // Check for meetPointId
         const meetPointId = urlParams.get('meetPointId');
-        
-        console.log('[Home] web search params:', window.location.search);
-        
         if (meetPointId) {
           console.log('[Home] meetPointId detected from window.location:', meetPointId);
           setIsRedirecting(true);
@@ -51,7 +72,7 @@ export default function HomeScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading Meet Point...
+          Loading...
         </Text>
       </View>
     );

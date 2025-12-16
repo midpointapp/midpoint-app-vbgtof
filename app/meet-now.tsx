@@ -27,6 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/app/integrations/supabase/client';
 import { generateId } from '@/utils/idGenerator';
 import { calculateMidpoint, searchNearbyPlaces } from '@/utils/locationUtils';
+import { createSessionAndSendInvite } from '@/utils/sessionUtils';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
 
@@ -766,6 +767,63 @@ export default function MeetNowScreen() {
     }
   };
 
+  const handleCreateSession = async () => {
+    if (!selectedContact) {
+      Alert.alert('No Contact Selected', 'Please select a contact first.');
+      return;
+    }
+
+    if (!myLocation) {
+      Alert.alert('Location Required', 'Please wait for your location to be obtained before creating a session.');
+      return;
+    }
+
+    if (!selectedMeetupType) {
+      Alert.alert('Meetup Type Required', 'Please select a meetup type before creating a session.');
+      return;
+    }
+
+    try {
+      setCreatingMeetPoint(true);
+
+      console.log('[MeetNow] Creating session with new flow...');
+
+      // Create session and send invite
+      const sessionId = await createSessionAndSendInvite({
+        type: selectedMeetupType,
+        senderLat: myLocation.latitude,
+        senderLng: myLocation.longitude,
+        phoneNumber: selectedContact.phoneNumber,
+        recipientName: selectedContact.name,
+      });
+
+      if (sessionId) {
+        console.log('[MeetNow] Session created successfully:', sessionId);
+        Alert.alert(
+          'Session Created!',
+          'Your session invite has been sent. You can now wait for the other person to join.',
+          [
+            {
+              text: 'View Session',
+              onPress: () => router.push(`/session?sessionId=${sessionId}`),
+            },
+            { text: 'OK' },
+          ]
+        );
+      }
+
+      setCreatingMeetPoint(false);
+    } catch (error: any) {
+      console.error('[MeetNow] Error creating session:', error);
+      setCreatingMeetPoint(false);
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to create session. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const handleSelectPlace = async (place: Place) => {
     if (!sessionMeetPoint) {
       return;
@@ -1209,27 +1267,46 @@ export default function MeetNowScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={[
-            styles.createButton, 
-            { backgroundColor: colors.primary },
-            (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint) && styles.createButtonDisabled
-          ]}
-          onPress={handleCreateAndShareMeetPoint}
-          activeOpacity={0.8}
-          disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint}
-        >
-          {creatingMeetPoint ? (
-            <View style={styles.loadingButtonContainer}>
-              <ActivityIndicator color="#FFFFFF" size="small" />
-              <Text style={styles.createButtonText}>Creating...</Text>
-            </View>
-          ) : (
-            <Text style={styles.createButtonText}>
-              {isSafeMode ? 'Create Safe Meet Point' : 'Create Meet Point'}
+        <View style={styles.buttonGroup}>
+          <TouchableOpacity
+            style={[
+              styles.createButton, 
+              { backgroundColor: colors.primary },
+              (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint) && styles.createButtonDisabled
+            ]}
+            onPress={handleCreateSession}
+            activeOpacity={0.8}
+            disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint}
+          >
+            {creatingMeetPoint ? (
+              <View style={styles.loadingButtonContainer}>
+                <ActivityIndicator color="#FFFFFF" size="small" />
+                <Text style={styles.createButtonText}>Creating...</Text>
+              </View>
+            ) : (
+              <Text style={styles.createButtonText}>
+                {isSafeMode ? 'Send Safe Meet Invite' : 'Send Meet Invite'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={[styles.orText, { color: colors.textSecondary }]}>or use legacy flow</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.legacyButton, 
+              { borderColor: colors.border, backgroundColor: colors.card },
+              (!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint) && styles.createButtonDisabled
+            ]}
+            onPress={handleCreateAndShareMeetPoint}
+            activeOpacity={0.8}
+            disabled={!myLocation || locationLoading || !selectedContact || !selectedMeetupType || creatingMeetPoint}
+          >
+            <Text style={[styles.legacyButtonText, { color: colors.text }]}>
+              Create Legacy Meet Point
             </Text>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       {/* Meetup Type Dropdown Modal */}
@@ -1633,13 +1710,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
   },
+  buttonGroup: {
+    marginTop: 16,
+    gap: 12,
+  },
   createButton: {
     borderRadius: 16,
     paddingVertical: 18,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
     boxShadow: '0px 4px 12px rgba(63, 81, 181, 0.3)',
     elevation: 4,
   },
@@ -1651,6 +1731,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  orText: {
+    textAlign: 'center',
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  legacyButton: {
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  legacyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   meetSomeoneElseModal: {
     width: '90%',

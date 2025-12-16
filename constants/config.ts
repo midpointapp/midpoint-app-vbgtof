@@ -20,3 +20,13 @@ export const generateShareUrl = (meetPointId: string): string => {
   console.log('[Invite] SMS link (root path):', url);
   return url;
 };
+
+/**
+ * Generate a session URL for the new session flow
+ * Format: https://web-midpoint-app-vbgtof.natively.dev/?sessionId=<id>
+ */
+export const generateSessionUrl = (sessionId: string): string => {
+  const url = `${DOWNLOAD_LINK}/?sessionId=${sessionId}`;
+  console.log('[Session] SMS link (root path):', url);
+  return url;
+};
