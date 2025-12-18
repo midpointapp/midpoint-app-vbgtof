@@ -1,108 +1,13 @@
 
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
   const colors = useThemeColors();
-  const [isRedirecting, setIsRedirecting] = React.useState(false);
-
-  // Auto-route to Session flow if sessionId + token are present in URL
-  // Auto-route to Meet Now flow if meetPointId is present in URL
-  useEffect(() => {
-    console.log('[Home] Checking URL params for auto-routing...');
-    console.log('[Home] All params:', JSON.stringify(params, null, 2));
-    
-    // Check for sessionId + token first (new flow)
-    if (params?.sessionId) {
-      const sessionId = Array.isArray(params.sessionId) 
-        ? params.sessionId[0] 
-        : params.sessionId;
-      const token = params?.token 
-        ? (Array.isArray(params.token) ? params.token[0] : params.token)
-        : null;
-      
-      console.log('[Home] sessionId detected from params:', sessionId);
-      console.log('[Home] token detected from params:', token);
-      console.log('[Home] Navigation target: /session');
-      setIsRedirecting(true);
-      
-      if (token) {
-        router.replace(`/session?sessionId=${sessionId}&token=${token}`);
-      } else {
-        router.replace(`/session?sessionId=${sessionId}`);
-      }
-      return;
-    }
-
-    // Check URL params from expo-router for meetPointId (legacy flow)
-    if (params?.meetPointId) {
-      const meetPointId = Array.isArray(params.meetPointId) 
-        ? params.meetPointId[0] 
-        : params.meetPointId;
-      
-      console.log('[Home] meetPointId detected from params:', meetPointId);
-      console.log('[Home] Navigation target: /meet-now');
-      setIsRedirecting(true);
-      router.replace(`/meet-now?meetPointId=${meetPointId}`);
-      return;
-    }
-
-    // On web, also check window.location.search
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        console.log('[Home] Checking window.location.search:', window.location.search);
-        
-        // Check for sessionId + token (new flow)
-        const sessionId = urlParams.get('sessionId');
-        const token = urlParams.get('token');
-        if (sessionId) {
-          console.log('[Home] sessionId detected from window.location:', sessionId);
-          console.log('[Home] token detected from window.location:', token);
-          console.log('[Home] Navigation target: /session');
-          setIsRedirecting(true);
-          
-          if (token) {
-            router.replace(`/session?sessionId=${sessionId}&token=${token}`);
-          } else {
-            router.replace(`/session?sessionId=${sessionId}`);
-          }
-          return;
-        }
-
-        // Check for meetPointId (legacy flow)
-        const meetPointId = urlParams.get('meetPointId');
-        if (meetPointId) {
-          console.log('[Home] meetPointId detected from window.location:', meetPointId);
-          console.log('[Home] Navigation target: /meet-now');
-          setIsRedirecting(true);
-          router.replace(`/meet-now?meetPointId=${meetPointId}`);
-          return;
-        }
-      } catch (error) {
-        console.error('[Home] Error parsing URL:', error);
-      }
-    }
-    
-    console.log('[Home] No auto-routing params found, showing normal home UI');
-  }, [params, router]);
-
-  // Show loading view while redirecting
-  if (isRedirecting) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading session...
-        </Text>
-      </View>
-    );
-  }
 
   const handleMeetNow = () => {
     router.push('/meet-now');
@@ -242,9 +147,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontStyle: 'italic',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
   },
 });
