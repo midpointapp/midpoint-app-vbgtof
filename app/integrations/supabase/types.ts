@@ -81,41 +81,88 @@ export type Database = {
       meet_sessions: {
         Row: {
           id: string
-          type: string
+          category: string
           sender_lat: number
           sender_lng: number
           receiver_lat: number | null
           receiver_lng: number | null
-          radius_meters: number
-          results_json: Json
-          selected_place_id: string | null
-          status: 'pending' | 'receiver_joined' | 'selected'
+          status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired'
+          invite_token: string
+          expires_at: string
+          proposed_place_id: string | null
+          confirmed_place_id: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
-          type: string
+          category: string
           sender_lat: number
           sender_lng: number
           receiver_lat?: number | null
           receiver_lng?: number | null
-          radius_meters?: number
-          results_json?: Json
-          selected_place_id?: string | null
-          status?: 'pending' | 'receiver_joined' | 'selected'
+          status?: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired'
+          invite_token?: string
+          expires_at?: string
+          proposed_place_id?: string | null
+          confirmed_place_id?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
-          type?: string
+          category?: string
           sender_lat?: number
           sender_lng?: number
           receiver_lat?: number | null
           receiver_lng?: number | null
-          radius_meters?: number
-          results_json?: Json
-          selected_place_id?: string | null
-          status?: 'pending' | 'receiver_joined' | 'selected'
+          status?: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired'
+          invite_token?: string
+          expires_at?: string
+          proposed_place_id?: string | null
+          confirmed_place_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      session_places: {
+        Row: {
+          id: string
+          session_id: string
+          place_id: string
+          name: string
+          address: string
+          lat: number
+          lng: number
+          rank: number
+          rating: number
+          distance: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          place_id: string
+          name: string
+          address: string
+          lat: number
+          lng: number
+          rank: number
+          rating?: number
+          distance?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          place_id?: string
+          name?: string
+          address?: string
+          lat?: number
+          lng?: number
+          rank?: number
+          rating?: number
+          distance?: number
           created_at?: string
         }
       }

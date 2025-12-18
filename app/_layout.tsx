@@ -75,6 +75,9 @@ export default function RootLayout() {
         
         // Expo Router will automatically handle the routing based on the URL
         // We just log for debugging purposes
+        if (parsed.queryParams?.sessionId) {
+          console.log("[DeepLink] sessionId detected:", parsed.queryParams.sessionId);
+        }
         if (parsed.queryParams?.meetPointId) {
           console.log("[DeepLink] meetPointId detected:", parsed.queryParams.meetPointId);
         }
@@ -168,6 +171,13 @@ export default function RootLayout() {
                   presentation: "modal",
                   headerShown: true,
                   title: "Meet Now",
+                }}
+              />
+              <Stack.Screen
+                name="session"
+                options={{
+                  headerShown: true,
+                  title: "Meet Session",
                 }}
               />
               <Stack.Screen

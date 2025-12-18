@@ -1,32 +1,22 @@
 
-// Configuration file for API keys and constants
-// Get your API key from: https://console.cloud.google.com/apis/credentials
-
-export const GOOGLE_PLACES_API_KEY = 'AIzaSyBMxU0JXR2Iq1Lj0ao0Dj_5x134GuRaYd8';
-
-// Base URL for deep links - ALWAYS use root path with query parameters
-export const DOWNLOAD_LINK = 'https://web-midpoint-app-vbgtof.natively.dev';
-
-export const DEFAULT_SEARCH_RADIUS = 10000; // meters (10km)
+// Base URL for the web app
+export const WEB_BASE_URL = 'https://web-midpoint-app-vbgtof.natively.dev';
 
 /**
- * Generate a share URL for a MeetPoint
- * IMPORTANT: Use ROOT path (/) with query parameter to avoid 404 on web
- * The home screen will auto-route to /meet-now internally
- * Format: https://web-midpoint-app-vbgtof.natively.dev/?meetPointId=<id>
+ * Generate a shareable URL for a meet point (legacy flow)
+ * @param meetPointId - The unique ID of the meet point
+ * @returns The full shareable URL
  */
-export const generateShareUrl = (meetPointId: string): string => {
-  const url = `${DOWNLOAD_LINK}/?meetPointId=${meetPointId}`;
-  console.log('[Invite] SMS link (root path):', url);
-  return url;
-};
+export function generateShareUrl(meetPointId: string): string {
+  return `${WEB_BASE_URL}/?meetPointId=${meetPointId}`;
+}
 
 /**
- * Generate a session URL for the new session flow
- * Format: https://web-midpoint-app-vbgtof.natively.dev/?sessionId=<id>
+ * Generate a session URL with sessionId and token (new flow)
+ * @param sessionId - The unique ID of the session
+ * @param token - The invite token for secure access
+ * @returns The full session URL
  */
-export const generateSessionUrl = (sessionId: string): string => {
-  const url = `${DOWNLOAD_LINK}/?sessionId=${sessionId}`;
-  console.log('[Session] SMS link (root path):', url);
-  return url;
-};
+export function generateSessionUrl(sessionId: string, token: string): string {
+  return `${WEB_BASE_URL}/?sessionId=${sessionId}&token=${token}`;
+}

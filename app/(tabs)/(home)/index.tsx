@@ -11,22 +11,31 @@ export default function HomeScreen() {
   const colors = useThemeColors();
   const [isRedirecting, setIsRedirecting] = React.useState(false);
 
+  // Auto-route to Session flow if sessionId + token are present in URL
   // Auto-route to Meet Now flow if meetPointId is present in URL
-  // Auto-route to Session flow if sessionId is present in URL
   useEffect(() => {
-    // Check for sessionId first
+    // Check for sessionId + token first (new flow)
     if (params?.sessionId) {
       const sessionId = Array.isArray(params.sessionId) 
         ? params.sessionId[0] 
         : params.sessionId;
+      const token = params?.token 
+        ? (Array.isArray(params.token) ? params.token[0] : params.token)
+        : null;
       
       console.log('[Home] sessionId detected from params:', sessionId);
+      console.log('[Home] token detected from params:', token);
       setIsRedirecting(true);
-      router.replace(`/session?sessionId=${sessionId}`);
+      
+      if (token) {
+        router.replace(`/session?sessionId=${sessionId}&token=${token}`);
+      } else {
+        router.replace(`/session?sessionId=${sessionId}`);
+      }
       return;
     }
 
-    // Check URL params from expo-router for meetPointId
+    // Check URL params from expo-router for meetPointId (legacy flow)
     if (params?.meetPointId) {
       const meetPointId = Array.isArray(params.meetPointId) 
         ? params.meetPointId[0] 
@@ -43,16 +52,23 @@ export default function HomeScreen() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         
-        // Check for sessionId
+        // Check for sessionId + token (new flow)
         const sessionId = urlParams.get('sessionId');
+        const token = urlParams.get('token');
         if (sessionId) {
           console.log('[Home] sessionId detected from window.location:', sessionId);
+          console.log('[Home] token detected from window.location:', token);
           setIsRedirecting(true);
-          router.replace(`/session?sessionId=${sessionId}`);
+          
+          if (token) {
+            router.replace(`/session?sessionId=${sessionId}&token=${token}`);
+          } else {
+            router.replace(`/session?sessionId=${sessionId}`);
+          }
           return;
         }
 
-        // Check for meetPointId
+        // Check for meetPointId (legacy flow)
         const meetPointId = urlParams.get('meetPointId');
         if (meetPointId) {
           console.log('[Home] meetPointId detected from window.location:', meetPointId);

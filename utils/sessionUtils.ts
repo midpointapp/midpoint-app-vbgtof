@@ -1,8 +1,6 @@
 
 import { supabase } from '@/app/integrations/supabase/client';
 import { searchNearbyPlaces, calculateMidpoint } from './locationUtils';
-import { generateSessionUrl } from '@/constants/config';
-import * as SMS from 'expo-sms';
 import { Share, Platform, Alert } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
@@ -17,8 +15,19 @@ interface Place {
   placeId?: string;
 }
 
+interface SessionPlace {
+  place_id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  rank: number;
+  rating: number;
+  distance: number;
+}
+
 interface CreateSessionParams {
-  type: string;
+  category: string;
   senderLat: number;
   senderLng: number;
   phoneNumber?: string;
@@ -26,26 +35,33 @@ interface CreateSessionParams {
 }
 
 /**
- * Create a new meet session and send SMS invite
- * Generates 1-3 unique midpoint places for the chosen category
- * Expands radius once if fewer than 1 result found
+ * Generate session URL with sessionId and token
+ */
+export function generateSessionUrl(sessionId: string, token: string): string {
+  const baseUrl = 'https://web-midpoint-app-vbgtof.natively.dev';
+  return `${baseUrl}/?sessionId=${sessionId}&token=${token}`;
+}
+
+/**
+ * Create a new meet session and send invite
+ * Session is created with status='waiting_for_receiver'
+ * Places are NOT generated until receiver joins
  */
 export async function createSessionAndSendInvite(params: CreateSessionParams): Promise<string | null> {
-  const { type, senderLat, senderLng, phoneNumber, recipientName } = params;
+  const { category, senderLat, senderLng, phoneNumber, recipientName } = params;
 
   try {
-    console.log('[SessionUtils] Creating session with params:', { type, senderLat, senderLng });
+    console.log('[SessionUtils] Creating session with params:', { category, senderLat, senderLng });
 
     // Create session in Supabase
     const { data: sessionData, error: insertError } = await supabase
       .from('meet_sessions')
       .insert([
         {
-          type,
+          category,
           sender_lat: senderLat,
           sender_lng: senderLng,
-          status: 'pending',
-          radius_meters: 5000, // Start with 5km radius
+          status: 'waiting_for_receiver',
         },
       ])
       .select()
@@ -57,12 +73,13 @@ export async function createSessionAndSendInvite(params: CreateSessionParams): P
     }
 
     const sessionId = sessionData.id;
+    const inviteToken = sessionData.invite_token;
     console.log('[SessionUtils] Session created with ID:', sessionId);
 
-    // Generate session URL
-    const sessionUrl = generateSessionUrl(sessionId);
+    // Generate session URL with token
+    const sessionUrl = generateSessionUrl(sessionId, inviteToken);
 
-    // Send SMS invite
+    // Send invite
     await sendSessionInvite(sessionUrl, phoneNumber, recipientName);
 
     return sessionId;
@@ -73,7 +90,7 @@ export async function createSessionAndSendInvite(params: CreateSessionParams): P
 }
 
 /**
- * Send session invite via SMS or Share API
+ * Send session invite via Share API or clipboard
  */
 async function sendSessionInvite(
   sessionUrl: string,
@@ -122,8 +139,8 @@ async function sendSessionInvite(
 }
 
 /**
- * Generate midpoint places for a session
- * Returns 1-3 unique results, expands radius once if needed
+ * Generate exactly 3 meeting place options near the midpoint
+ * Called AFTER receiver joins and provides location
  */
 export async function generateMidpointPlaces(
   sessionId: string,
@@ -131,9 +148,8 @@ export async function generateMidpointPlaces(
   senderLng: number,
   receiverLat: number,
   receiverLng: number,
-  type: string,
-  initialRadius: number = 5000
-): Promise<Place[]> {
+  category: string
+): Promise<SessionPlace[]> {
   try {
     console.log('[SessionUtils] Generating midpoint places for session:', sessionId);
 
@@ -148,22 +164,12 @@ export async function generateMidpointPlaces(
 
     console.log('[SessionUtils] Midpoint calculated:', { midLat, midLng });
 
-    // Search for places with initial radius
+    // Search for places
     let foundPlaces: Place[] = [];
-    let currentRadius = initialRadius;
-    const maxRadius = initialRadius * 2;
-
+    
     try {
-      foundPlaces = await searchNearbyPlaces(midLat, midLng, type);
-      console.log('[SessionUtils] Found places with initial radius:', foundPlaces.length);
-
-      // If fewer than 1 result, expand radius once
-      if (foundPlaces.length < 1 && currentRadius < maxRadius) {
-        console.log('[SessionUtils] Expanding search radius to:', maxRadius);
-        currentRadius = maxRadius;
-        foundPlaces = await searchNearbyPlaces(midLat, midLng, type);
-        console.log('[SessionUtils] Found places with expanded radius:', foundPlaces.length);
-      }
+      foundPlaces = await searchNearbyPlaces(midLat, midLng, category);
+      console.log('[SessionUtils] Found places:', foundPlaces.length);
     } catch (searchError) {
       console.error('[SessionUtils] Error searching places:', searchError);
       // Continue with empty results rather than failing
@@ -174,29 +180,46 @@ export async function generateMidpointPlaces(
       index === self.findIndex((p) => p.placeId === place.placeId)
     );
 
-    // Return 1-3 results
+    // Take exactly 3 results (or fewer if not available)
     const finalPlaces = uniquePlaces.slice(0, 3);
 
     if (finalPlaces.length === 0) {
-      console.warn('[SessionUtils] No places found even after expanding radius');
+      console.warn('[SessionUtils] No places found near midpoint');
+      return [];
     }
 
     console.log('[SessionUtils] Final places count:', finalPlaces.length);
 
-    // Update session with results
-    const { error: updateError } = await supabase
-      .from('meet_sessions')
-      .update({
-        results_json: finalPlaces,
-        radius_meters: currentRadius,
-      })
-      .eq('id', sessionId);
+    // Save places to session_places table
+    const sessionPlaces: SessionPlace[] = finalPlaces.map((place, index) => ({
+      place_id: place.placeId || place.id,
+      name: place.name,
+      address: place.address,
+      lat: place.latitude,
+      lng: place.longitude,
+      rank: index + 1,
+      rating: place.rating || 0,
+      distance: place.distance || 0,
+    }));
 
-    if (updateError) {
-      console.error('[SessionUtils] Error updating session with results:', updateError);
+    // Insert all places
+    const { error: insertError } = await supabase
+      .from('session_places')
+      .insert(
+        sessionPlaces.map(place => ({
+          session_id: sessionId,
+          ...place,
+        }))
+      );
+
+    if (insertError) {
+      console.error('[SessionUtils] Error inserting session places:', insertError);
+      throw new Error('Failed to save meeting places');
     }
 
-    return finalPlaces;
+    console.log('[SessionUtils] Session places saved successfully');
+
+    return sessionPlaces;
   } catch (error) {
     console.error('[SessionUtils] Error in generateMidpointPlaces:', error);
     throw error;
