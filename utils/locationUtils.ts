@@ -55,7 +55,7 @@ export function calculateMidpoint(
   const midLat = (maskedUserLat + contactLat) / 2;
   const midLng = (maskedUserLng + contactLng) / 2;
   
-  console.log('Midpoint calculation:', {
+  console.log('[LocationUtils] Midpoint calculation:', {
     userLat: maskedUserLat,
     userLng: maskedUserLng,
     contactLat,
@@ -77,7 +77,7 @@ export function calculateMidpointFromParticipants(participants: SessionParticipa
   );
 
   if (validParticipants.length === 0) {
-    console.log('No valid participants with location data');
+    console.log('[LocationUtils] No valid participants with location data');
     return null;
   }
 
@@ -160,9 +160,13 @@ export async function searchNearbyPlaces(
   midLng: number,
   meetupType: string
 ): Promise<Place[]> {
+  // Log API key status
+  console.log('[Places] API key present:', !!GOOGLE_PLACES_API_KEY);
+  console.log('[Places] API key length:', GOOGLE_PLACES_API_KEY?.length || 0);
+  
   // Check if API key is configured
   if (!GOOGLE_PLACES_API_KEY || GOOGLE_PLACES_API_KEY === 'YOUR_GOOGLE_API_KEY_HERE') {
-    console.error('Google Places API key not configured');
+    console.error('[Places] Google Places API key not configured');
     throw new Error('Google Places API key not configured. Please add your API key in constants/config.ts');
   }
 
@@ -183,15 +187,18 @@ export async function searchNearbyPlaces(
   
   url += `&key=${GOOGLE_PLACES_API_KEY}`;
 
-  console.log('Searching Google Places API:', { midLat, midLng, meetupType, type, keyword });
+  console.log('[Places] Searching Google Places API:', { midLat, midLng, meetupType, type, keyword, radius });
+  console.log('[Places] Request URL (without key):', url.replace(GOOGLE_PLACES_API_KEY, 'REDACTED'));
 
   try {
     const response = await fetch(url);
     const data = await response.json();
 
-    console.log('Google Places API response status:', data.status);
+    console.log('[Places] API response status:', data.status);
 
     if (data.status === 'OK' && data.results && data.results.length > 0) {
+      console.log('[Places] API returned', data.results.length, 'results');
+      
       // Parse and transform results
       const places: Place[] = data.results.map((place: any) => {
         const placeLat = place.geometry.location.lat;
@@ -220,24 +227,24 @@ export async function searchNearbyPlaces(
 
       // Return top 5 places
       const topPlaces = places.slice(0, 5);
-      console.log(`Found ${places.length} places, returning top ${topPlaces.length}`);
+      console.log('[Places] Returning top', topPlaces.length, 'places');
       
       return topPlaces;
     } else if (data.status === 'ZERO_RESULTS') {
-      console.log('No places found in the area');
+      console.log('[Places] No places found in the area');
       return [];
     } else if (data.status === 'REQUEST_DENIED') {
-      console.error('Google Places API request denied:', data.error_message);
+      console.error('[Places] API request denied:', data.error_message);
       throw new Error(`API request denied: ${data.error_message || 'Check your API key and billing'}`);
     } else if (data.status === 'INVALID_REQUEST') {
-      console.error('Invalid request to Google Places API:', data.error_message);
+      console.error('[Places] Invalid request:', data.error_message);
       throw new Error(`Invalid request: ${data.error_message || 'Check request parameters'}`);
     } else {
-      console.error('Google Places API error:', data.status, data.error_message);
+      console.error('[Places] API error:', data.status, data.error_message);
       throw new Error(`API error: ${data.status} - ${data.error_message || 'Unknown error'}`);
     }
   } catch (error: any) {
-    console.error('Error fetching places from Google Places API:', error);
+    console.error('[Places] Error fetching places from Google Places API:', error);
     
     // Re-throw with more context
     if (error.message && error.message.includes('API')) {
@@ -256,6 +263,6 @@ export function openMapsApp(latitude: number, longitude: number, label?: string)
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(label)}&query_place_id=${latitude},${longitude}`
     : `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
   
-  console.log('Opening maps with URL:', url);
+  console.log('[LocationUtils] Opening maps with URL:', url);
   return url;
 }

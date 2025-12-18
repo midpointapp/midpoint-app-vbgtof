@@ -75,9 +75,11 @@ export async function createSessionAndSendInvite(params: CreateSessionParams): P
     const sessionId = sessionData.id;
     const inviteToken = sessionData.invite_token;
     console.log('[SessionUtils] Session created with ID:', sessionId);
+    console.log('[SessionUtils] Invite token:', inviteToken);
 
     // Generate session URL with token
     const sessionUrl = generateSessionUrl(sessionId, inviteToken);
+    console.log('[SessionUtils] Session URL:', sessionUrl);
 
     // Send invite
     await sendSessionInvite(sessionUrl, phoneNumber, recipientName);
@@ -152,6 +154,8 @@ export async function generateMidpointPlaces(
 ): Promise<SessionPlace[]> {
   try {
     console.log('[SessionUtils] Generating midpoint places for session:', sessionId);
+    console.log('[SessionUtils] Sender coords:', { senderLat, senderLng });
+    console.log('[SessionUtils] Receiver coords:', { receiverLat, receiverLng });
 
     // Calculate midpoint
     const { midLat, midLng } = calculateMidpoint(
@@ -168,8 +172,9 @@ export async function generateMidpointPlaces(
     let foundPlaces: Place[] = [];
     
     try {
+      console.log('[SessionUtils] Firing Places API request...');
       foundPlaces = await searchNearbyPlaces(midLat, midLng, category);
-      console.log('[SessionUtils] Found places:', foundPlaces.length);
+      console.log('[SessionUtils] Places API returned:', foundPlaces.length, 'results');
     } catch (searchError) {
       console.error('[SessionUtils] Error searching places:', searchError);
       // Continue with empty results rather than failing
@@ -179,6 +184,8 @@ export async function generateMidpointPlaces(
     const uniquePlaces = foundPlaces.filter((place, index, self) =>
       index === self.findIndex((p) => p.placeId === place.placeId)
     );
+
+    console.log('[SessionUtils] Unique places after deduplication:', uniquePlaces.length);
 
     // Take exactly 3 results (or fewer if not available)
     const finalPlaces = uniquePlaces.slice(0, 3);
@@ -203,6 +210,7 @@ export async function generateMidpointPlaces(
     }));
 
     // Insert all places
+    console.log('[SessionUtils] Inserting', sessionPlaces.length, 'places into DB...');
     const { error: insertError } = await supabase
       .from('session_places')
       .insert(
@@ -217,7 +225,7 @@ export async function generateMidpointPlaces(
       throw new Error('Failed to save meeting places');
     }
 
-    console.log('[SessionUtils] Session places saved successfully');
+    console.log('[SessionUtils] DB insert success: saved', sessionPlaces.length, 'places');
 
     return sessionPlaces;
   } catch (error) {

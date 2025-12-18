@@ -54,7 +54,7 @@ export default function RootLayout() {
     }
   }, [networkState.isConnected, networkState.isInternetReachable]);
 
-  // Handle deep links - simplified to just log and let Expo Router handle routing
+  // Handle deep links on cold start
   useEffect(() => {
     if (!appReady) {
       return;
@@ -71,29 +71,49 @@ export default function RootLayout() {
       try {
         // Parse the URL to extract path and query parameters
         const parsed = Linking.parse(url);
-        console.log("[DeepLink] Parsed:", JSON.stringify(parsed, null, 2));
+        console.log("[DeepLink] Parsed URL:", JSON.stringify(parsed, null, 2));
         
-        // Expo Router will automatically handle the routing based on the URL
-        // We just log for debugging purposes
+        // Check for sessionId + token (new flow)
         if (parsed.queryParams?.sessionId) {
-          console.log("[DeepLink] sessionId detected:", parsed.queryParams.sessionId);
+          const sessionId = parsed.queryParams.sessionId as string;
+          const token = parsed.queryParams.token as string | undefined;
+          
+          console.log("[DeepLink] sessionId detected:", sessionId);
+          console.log("[DeepLink] token detected:", token);
+          console.log("[DeepLink] Navigation target: /session");
+          
+          // Navigate to session screen
+          if (token) {
+            router.replace(`/session?sessionId=${sessionId}&token=${token}`);
+          } else {
+            router.replace(`/session?sessionId=${sessionId}`);
+          }
+          return;
         }
+        
+        // Check for meetPointId (legacy flow)
         if (parsed.queryParams?.meetPointId) {
-          console.log("[DeepLink] meetPointId detected:", parsed.queryParams.meetPointId);
+          const meetPointId = parsed.queryParams.meetPointId as string;
+          console.log("[DeepLink] meetPointId detected:", meetPointId);
+          console.log("[DeepLink] Navigation target: /meet-now");
+          router.replace(`/meet-now?meetPointId=${meetPointId}`);
+          return;
         }
+        
+        console.log("[DeepLink] No recognized parameters in URL");
       } catch (error) {
         console.error("[DeepLink] Error parsing URL:", error);
       }
     };
 
-    // Handle initial URL if app was opened via deep link
+    // Handle initial URL if app was opened via deep link (cold start)
     if (!initialUrlProcessed) {
-      console.log("[DeepLink] Checking for initial URL...");
+      console.log("[DeepLink] Checking for initial URL (cold start)...");
       
       Linking.getInitialURL()
         .then((url) => {
           if (url) {
-            console.log("[DeepLink] Initial URL found:", url);
+            console.log("[DeepLink] Initial URL found (cold start):", url);
             handleDeepLink(url);
           } else {
             console.log("[DeepLink] No initial URL found");
@@ -108,7 +128,7 @@ export default function RootLayout() {
 
     // Listen for deep links when app is already open
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log("[DeepLink] Deep link event received");
+      console.log("[DeepLink] Deep link event received (app already open)");
       if (event?.url) {
         handleDeepLink(event.url);
       }

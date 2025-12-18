@@ -10,7 +10,6 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  FlatList,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
@@ -73,6 +72,9 @@ export default function SessionScreen() {
   // Extract sessionId and token from URL params
   useEffect(() => {
     const extractParams = () => {
+      console.log('[Session] Extracting params from URL...');
+      console.log('[Session] All params:', JSON.stringify(params, null, 2));
+      
       // Check URL params from expo-router
       if (params?.sessionId) {
         const id = Array.isArray(params.sessionId) 
@@ -105,7 +107,7 @@ export default function SessionScreen() {
       }
 
       // No sessionId found
-      console.log('[Session] No sessionId found');
+      console.log('[Session] No sessionId found in URL');
       setError('No session ID provided');
       setLoading(false);
     };
@@ -120,7 +122,7 @@ export default function SessionScreen() {
     }
   }, [sessionId, inviteToken]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates using database changes
   useEffect(() => {
     if (!sessionId || !session) return;
 
@@ -132,43 +134,57 @@ export default function SessionScreen() {
       return;
     }
 
-    // Subscribe to session changes
+    // Subscribe to session changes using postgres_changes
     const sessionChannel = supabase
-      .channel(`session:${sessionId}`, {
-        config: { private: true }
-      })
-      .on('broadcast', { event: 'UPDATE' }, (payload) => {
-        console.log('[Session] Received session update:', payload);
-        if (payload.payload?.new) {
-          const updatedSession = payload.payload.new as MeetSession;
-          setSession(updatedSession);
+      .channel(`session:${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'meet_sessions',
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          console.log('[Session] Received session update:', payload);
+          if (payload.new) {
+            const updatedSession = payload.new as MeetSession;
+            setSession(updatedSession);
+          }
         }
-      })
+      )
       .subscribe((status) => {
         console.log('[Session] Session channel status:', status);
       });
 
     sessionChannelRef.current = sessionChannel;
 
-    // Subscribe to session_places changes
+    // Subscribe to session_places changes using postgres_changes
     const placesChannel = supabase
-      .channel(`session:${sessionId}:places`, {
-        config: { private: true }
-      })
-      .on('broadcast', { event: 'INSERT' }, (payload) => {
-        console.log('[Session] Received places insert:', payload);
-        if (payload.payload?.new) {
-          const newPlace = payload.payload.new as SessionPlace;
-          setPlaces(prev => {
-            // Check if place already exists
-            if (prev.some(p => p.id === newPlace.id)) {
-              return prev;
-            }
-            // Add and sort by rank
-            return [...prev, newPlace].sort((a, b) => a.rank - b.rank);
-          });
+      .channel(`session:${sessionId}:places`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'session_places',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          console.log('[Session] Received places insert:', payload);
+          if (payload.new) {
+            const newPlace = payload.new as SessionPlace;
+            setPlaces(prev => {
+              // Check if place already exists
+              if (prev.some(p => p.id === newPlace.id)) {
+                return prev;
+              }
+              // Add and sort by rank
+              return [...prev, newPlace].sort((a, b) => a.rank - b.rank);
+            });
+          }
         }
-      })
+      )
       .subscribe((status) => {
         console.log('[Session] Places channel status:', status);
       });
@@ -194,6 +210,7 @@ export default function SessionScreen() {
       setLoading(true);
       setError(null);
       console.log('[Session] Loading session:', id);
+      console.log('[Session] With token:', token);
 
       // Fetch session from Supabase
       const { data, error: fetchError } = await supabase
@@ -204,7 +221,7 @@ export default function SessionScreen() {
 
       if (fetchError || !data) {
         console.error('[Session] Error loading session:', fetchError);
-        setError('This session link is invalid or expired.');
+        setError('Session expired or access denied');
         setLoading(false);
         return;
       }
@@ -503,7 +520,7 @@ export default function SessionScreen() {
     }
   };
 
-  const renderPlaceItem = ({ item, index }: { item: SessionPlace; index: number }) => {
+  const renderPlaceItem = (item: SessionPlace, index: number) => {
     const isProposed = session?.proposed_place_id === item.place_id;
     const isConfirmed = session?.confirmed_place_id === item.place_id;
     const canPropose = session?.status === 'connected' && isSender;
@@ -511,7 +528,7 @@ export default function SessionScreen() {
 
     return (
       <View
-        key={item?.id || `place-${index}`}
+        key={item.id}
         style={[
           styles.placeCard,
           { 
@@ -540,13 +557,13 @@ export default function SessionScreen() {
           </View>
           <View style={styles.placeInfo}>
             <Text style={[styles.placeName, { color: colors.text }]} numberOfLines={1}>
-              {item?.name || 'Unknown Place'}
+              {item.name}
             </Text>
             <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
-              {item?.address || 'Address not available'}
+              {item.address}
             </Text>
             <View style={styles.placeMetrics}>
-              {item?.rating > 0 && (
+              {item.rating > 0 && (
                 <View style={styles.ratingContainer}>
                   <MaterialIcons name="star" size={16} color="#FFC107" />
                   <Text style={[styles.ratingText, { color: colors.text }]}>
@@ -557,7 +574,7 @@ export default function SessionScreen() {
               <View style={styles.distanceContainer}>
                 <MaterialIcons name="place" size={16} color={colors.textSecondary} />
                 <Text style={[styles.distanceText, { color: colors.textSecondary }]}>
-                  {item?.distance?.toFixed(1) || '0.0'} km
+                  {item.distance.toFixed(1)} km
                 </Text>
               </View>
             </View>
@@ -746,13 +763,11 @@ export default function SessionScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             All Options
           </Text>
-          <FlatList
-            data={places}
-            renderItem={renderPlaceItem}
-            keyExtractor={(item, index) => item?.id || `place-${index}`}
-            scrollEnabled={false}
-            contentContainerStyle={styles.placesList}
-          />
+          {places.map((place, index) => (
+            <React.Fragment key={place.id}>
+              {renderPlaceItem(place, index)}
+            </React.Fragment>
+          ))}
         </ScrollView>
       </View>
     );
@@ -796,13 +811,13 @@ export default function SessionScreen() {
         </Text>
 
         {places.length > 0 ? (
-          <FlatList
-            data={places}
-            renderItem={renderPlaceItem}
-            keyExtractor={(item, index) => item?.id || `place-${index}`}
-            scrollEnabled={false}
-            contentContainerStyle={styles.placesList}
-          />
+          <>
+            {places.map((place, index) => (
+              <React.Fragment key={place.id}>
+                {renderPlaceItem(place, index)}
+              </React.Fragment>
+            ))}
+          </>
         ) : (
           <View style={[styles.noPlacesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <MaterialIcons name="info-outline" size={48} color={colors.textSecondary} />
@@ -966,13 +981,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  placesList: {
-    gap: 16,
-  },
   placeCard: {
     borderRadius: 12,
     padding: 16,
     gap: 12,
+    marginBottom: 16,
   },
   statusBadge: {
     flexDirection: 'row',

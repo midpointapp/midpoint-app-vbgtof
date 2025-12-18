@@ -14,6 +14,9 @@ export default function HomeScreen() {
   // Auto-route to Session flow if sessionId + token are present in URL
   // Auto-route to Meet Now flow if meetPointId is present in URL
   useEffect(() => {
+    console.log('[Home] Checking URL params for auto-routing...');
+    console.log('[Home] All params:', JSON.stringify(params, null, 2));
+    
     // Check for sessionId + token first (new flow)
     if (params?.sessionId) {
       const sessionId = Array.isArray(params.sessionId) 
@@ -25,6 +28,7 @@ export default function HomeScreen() {
       
       console.log('[Home] sessionId detected from params:', sessionId);
       console.log('[Home] token detected from params:', token);
+      console.log('[Home] Navigation target: /session');
       setIsRedirecting(true);
       
       if (token) {
@@ -42,6 +46,7 @@ export default function HomeScreen() {
         : params.meetPointId;
       
       console.log('[Home] meetPointId detected from params:', meetPointId);
+      console.log('[Home] Navigation target: /meet-now');
       setIsRedirecting(true);
       router.replace(`/meet-now?meetPointId=${meetPointId}`);
       return;
@@ -51,6 +56,7 @@ export default function HomeScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
+        console.log('[Home] Checking window.location.search:', window.location.search);
         
         // Check for sessionId + token (new flow)
         const sessionId = urlParams.get('sessionId');
@@ -58,6 +64,7 @@ export default function HomeScreen() {
         if (sessionId) {
           console.log('[Home] sessionId detected from window.location:', sessionId);
           console.log('[Home] token detected from window.location:', token);
+          console.log('[Home] Navigation target: /session');
           setIsRedirecting(true);
           
           if (token) {
@@ -72,6 +79,7 @@ export default function HomeScreen() {
         const meetPointId = urlParams.get('meetPointId');
         if (meetPointId) {
           console.log('[Home] meetPointId detected from window.location:', meetPointId);
+          console.log('[Home] Navigation target: /meet-now');
           setIsRedirecting(true);
           router.replace(`/meet-now?meetPointId=${meetPointId}`);
           return;
@@ -80,6 +88,8 @@ export default function HomeScreen() {
         console.error('[Home] Error parsing URL:', error);
       }
     }
+    
+    console.log('[Home] No auto-routing params found, showing normal home UI');
   }, [params, router]);
 
   // Show loading view while redirecting
@@ -88,7 +98,7 @@ export default function HomeScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading...
+          Loading session...
         </Text>
       </View>
     );
