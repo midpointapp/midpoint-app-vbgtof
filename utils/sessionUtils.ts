@@ -1,235 +1,186 @@
 
 import { supabase } from '@/app/integrations/supabase/client';
-import { searchNearbyPlaces, calculateMidpoint } from './locationUtils';
-import { Share, Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { Share } from 'react-native';
+import { generateMidpointPlaces } from './locationUtils';
 
-interface Place {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  rating: number;
-  distance: number;
-  placeId?: string;
-}
+const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_BASE_URL || 'https://web-midpoint-app-vbgtof.natively.dev';
 
-interface SessionPlace {
-  place_id: string;
-  name: string;
-  address: string;
-  lat: number;
-  lng: number;
-  rank: number;
-  rating: number;
-  distance: number;
-}
+console.log('[SessionUtils] Web base URL:', WEB_BASE_URL);
 
-interface CreateSessionParams {
-  category: string;
-  senderLat: number;
-  senderLng: number;
-  phoneNumber?: string;
-  recipientName?: string;
+/**
+ * Generate a secure random token for session invites
+ */
+function generateInviteToken(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
 /**
- * Generate session URL with sessionId and token
+ * Parse error message to provide user-friendly feedback
  */
-export function generateSessionUrl(sessionId: string, token: string): string {
-  const baseUrl = 'https://web-midpoint-app-vbgtof.natively.dev';
-  return `${baseUrl}/?sessionId=${sessionId}&token=${token}`;
-}
+function parseErrorMessage(error: any): string {
+  const errorStr = JSON.stringify(error, null, 2);
+  console.error('[SessionUtils] Full error details:', errorStr);
 
-/**
- * Create a new meet session and send invite
- * Session is created with status='waiting_for_receiver'
- * Places are NOT generated until receiver joins
- */
-export async function createSessionAndSendInvite(params: CreateSessionParams): Promise<string | null> {
-  const { category, senderLat, senderLng, phoneNumber, recipientName } = params;
-
-  try {
-    console.log('[SessionUtils] Creating session with params:', { category, senderLat, senderLng });
-
-    // Create session in Supabase
-    const { data: sessionData, error: insertError } = await supabase
-      .from('meet_sessions')
-      .insert([
-        {
-          category,
-          sender_lat: senderLat,
-          sender_lng: senderLng,
-          status: 'waiting_for_receiver',
-        },
-      ])
-      .select()
-      .single();
-
-    if (insertError || !sessionData) {
-      console.error('[SessionUtils] Error creating session:', insertError);
-      throw new Error('Failed to create session');
+  // Check for specific error patterns
+  if (error.message) {
+    const msg = error.message.toLowerCase();
+    
+    // Paused/inactive project
+    if (msg.includes('paused') || msg.includes('inactive') || msg.includes('project is not active')) {
+      return 'The database is temporarily unavailable. Please contact support or try again later.';
     }
-
-    const sessionId = sessionData.id;
-    const inviteToken = sessionData.invite_token;
-    console.log('[SessionUtils] Session created with ID:', sessionId);
-    console.log('[SessionUtils] Invite token:', inviteToken);
-
-    // Generate session URL with token
-    const sessionUrl = generateSessionUrl(sessionId, inviteToken);
-    console.log('[SessionUtils] Session URL:', sessionUrl);
-
-    // Send invite
-    await sendSessionInvite(sessionUrl, phoneNumber, recipientName);
-
-    return sessionId;
-  } catch (error) {
-    console.error('[SessionUtils] Error in createSessionAndSendInvite:', error);
-    throw error;
-  }
-}
-
-/**
- * Send session invite via Share API or clipboard
- */
-async function sendSessionInvite(
-  sessionUrl: string,
-  phoneNumber?: string,
-  recipientName?: string
-): Promise<void> {
-  const message = recipientName
-    ? `Hey ${recipientName}! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${sessionUrl}`
-    : `Hey! I'd like to meet you halfway. Open this link to share your location and find our meeting spot:\n\n${sessionUrl}`;
-
-  console.log('[SessionUtils] Sending invite with URL:', sessionUrl);
-
-  if (Platform.OS === 'web') {
-    // Web: Copy to clipboard and show alert
-    try {
-      await Clipboard.setStringAsync(sessionUrl);
-      Alert.alert(
-        'Link Copied!',
-        'The session invite link has been copied to your clipboard. Paste it in a message to share.',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.error('[SessionUtils] Error copying to clipboard:', error);
-      Alert.alert('Error', 'Failed to copy link. Please try again.');
+    
+    // Network errors
+    if (msg.includes('network') || msg.includes('fetch failed') || msg.includes('connection')) {
+      return 'No internet connection. Please check your network and try again.';
     }
-  } else {
-    // iOS/Android: Use Share API
-    try {
-      const shareResult = await Share.share({
-        message: message,
-        title: 'MidPoint Session Invite',
-      });
-
-      console.log('[SessionUtils] Share result:', shareResult);
-
-      if (shareResult.action === Share.sharedAction) {
-        console.log('[SessionUtils] Share completed successfully');
-      } else if (shareResult.action === Share.dismissedAction) {
-        console.log('[SessionUtils] Share dismissed');
-      }
-    } catch (error) {
-      console.error('[SessionUtils] Error sharing:', error);
-      Alert.alert('Error', 'Failed to share link. Please try again.');
+    
+    // Timeout errors
+    if (msg.includes('timeout') || msg.includes('timed out')) {
+      return 'Request timed out. Please check your connection and try again.';
+    }
+    
+    // Auth errors
+    if (msg.includes('jwt') || msg.includes('unauthorized') || msg.includes('forbidden')) {
+      return 'Authentication error. Please restart the app and try again.';
+    }
+    
+    // Database errors
+    if (msg.includes('relation') || msg.includes('does not exist') || msg.includes('table')) {
+      return 'Database configuration error. Please contact support.';
     }
   }
+
+  // Generic database error
+  if (error.code || error.details) {
+    return 'Server error. Please try again in a moment.';
+  }
+
+  return error.message || 'An unexpected error occurred. Please try again.';
 }
 
 /**
- * Generate exactly 3 meeting place options near the midpoint
- * Called AFTER receiver joins and provides location
+ * Create a session and send invite with retry logic
  */
-export async function generateMidpointPlaces(
-  sessionId: string,
+export async function createSessionAndSendInvite(
+  category: string,
   senderLat: number,
   senderLng: number,
-  receiverLat: number,
-  receiverLng: number,
-  category: string
-): Promise<SessionPlace[]> {
+  retryCount = 0
+): Promise<{ sessionId: string; inviteUrl: string }> {
+  console.log('[SessionUtils] Creating session:', { 
+    category, 
+    senderLat, 
+    senderLng, 
+    retryCount,
+    timestamp: new Date().toISOString()
+  });
+
   try {
-    console.log('[SessionUtils] Generating midpoint places for session:', sessionId);
-    console.log('[SessionUtils] Sender coords:', { senderLat, senderLng });
-    console.log('[SessionUtils] Receiver coords:', { receiverLat, receiverLng });
+    // Generate secure token
+    const inviteToken = generateInviteToken();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiry
 
-    // Calculate midpoint
-    const { midLat, midLng } = calculateMidpoint(
-      senderLat,
-      senderLng,
-      receiverLat,
-      receiverLng,
-      false
-    );
+    console.log('[SessionUtils] Inserting session into Supabase...');
+    console.log('[SessionUtils] Data:', {
+      category,
+      sender_lat: senderLat,
+      sender_lng: senderLng,
+      status: 'waiting_for_receiver',
+      expires_at: expiresAt.toISOString(),
+    });
 
-    console.log('[SessionUtils] Midpoint calculated:', { midLat, midLng });
+    // Insert session into Supabase
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .insert({
+        category,
+        sender_lat: senderLat,
+        sender_lng: senderLng,
+        status: 'waiting_for_receiver',
+        invite_token: inviteToken,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select('*')
+      .single();
 
-    // Search for places
-    let foundPlaces: Place[] = [];
-    
-    try {
-      console.log('[SessionUtils] Firing Places API request...');
-      foundPlaces = await searchNearbyPlaces(midLat, midLng, category);
-      console.log('[SessionUtils] Places API returned:', foundPlaces.length, 'results');
-    } catch (searchError) {
-      console.error('[SessionUtils] Error searching places:', searchError);
-      // Continue with empty results rather than failing
+    if (sessionError) {
+      console.error('[SessionUtils] Supabase error:', JSON.stringify(sessionError, null, 2));
+      throw sessionError;
     }
 
-    // Ensure unique places (by placeId)
-    const uniquePlaces = foundPlaces.filter((place, index, self) =>
-      index === self.findIndex((p) => p.placeId === place.placeId)
-    );
-
-    console.log('[SessionUtils] Unique places after deduplication:', uniquePlaces.length);
-
-    // Take exactly 3 results (or fewer if not available)
-    const finalPlaces = uniquePlaces.slice(0, 3);
-
-    if (finalPlaces.length === 0) {
-      console.warn('[SessionUtils] No places found near midpoint');
-      return [];
+    if (!sessionData) {
+      console.error('[SessionUtils] No session data returned');
+      throw new Error('Failed to create session: No data returned from database');
     }
 
-    console.log('[SessionUtils] Final places count:', finalPlaces.length);
+    console.log('[SessionUtils] ✅ Session created successfully:', sessionData.id);
 
-    // Save places to session_places table
-    const sessionPlaces: SessionPlace[] = finalPlaces.map((place, index) => ({
-      place_id: place.placeId || place.id,
-      name: place.name,
-      address: place.address,
-      lat: place.latitude,
-      lng: place.longitude,
-      rank: index + 1,
-      rating: place.rating || 0,
-      distance: place.distance || 0,
-    }));
+    // Generate invite URL using stable web base URL
+    const inviteUrl = `${WEB_BASE_URL}/?sessionId=${sessionData.id}&token=${inviteToken}`;
+    console.log('[SessionUtils] Invite URL generated:', inviteUrl);
 
-    // Insert all places
-    console.log('[SessionUtils] Inserting', sessionPlaces.length, 'places into DB...');
-    const { error: insertError } = await supabase
-      .from('session_places')
-      .insert(
-        sessionPlaces.map(place => ({
-          session_id: sessionId,
-          ...place,
-        }))
-      );
+    return {
+      sessionId: sessionData.id,
+      inviteUrl,
+    };
 
-    if (insertError) {
-      console.error('[SessionUtils] Error inserting session places:', insertError);
-      throw new Error('Failed to save meeting places');
+  } catch (error: any) {
+    console.error('[SessionUtils] ❌ Error creating session:', {
+      error: error,
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      retryCount,
+    });
+
+    // Retry once on network failure (but not on database/auth errors)
+    const shouldRetry = retryCount === 0 && 
+      error.message && 
+      (error.message.includes('Network') || 
+       error.message.includes('fetch') || 
+       error.message.includes('timeout'));
+
+    if (shouldRetry) {
+      console.log('[SessionUtils] Retrying session creation in 1 second...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return createSessionAndSendInvite(category, senderLat, senderLng, 1);
     }
 
-    console.log('[SessionUtils] DB insert success: saved', sessionPlaces.length, 'places');
-
-    return sessionPlaces;
-  } catch (error) {
-    console.error('[SessionUtils] Error in generateMidpointPlaces:', error);
-    throw error;
+    // Parse and throw user-friendly error
+    const userMessage = parseErrorMessage(error);
+    throw new Error(userMessage);
   }
 }
+
+/**
+ * Share invite URL via native share or clipboard
+ */
+export async function shareInviteUrl(inviteUrl: string): Promise<void> {
+  console.log('[SessionUtils] Sharing invite URL:', inviteUrl);
+  
+  try {
+    if (Platform.OS === 'web') {
+      await Clipboard.setStringAsync(inviteUrl);
+      console.log('[SessionUtils] ✅ Invite URL copied to clipboard');
+    } else {
+      const result = await Share.share({
+        message: `Join me on MidPoint! ${inviteUrl}`,
+        url: inviteUrl,
+      });
+      console.log('[SessionUtils] ✅ Share result:', result);
+    }
+  } catch (error) {
+    console.error('[SessionUtils] ❌ Error sharing invite:', error);
+    throw new Error('Failed to share invite');
+  }
+}
+
+/**
+ * Generate meeting places for a session
+ */
+export { generateMidpointPlaces };

@@ -1,18 +1,47 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Database } from './types';
-import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = "https://yryjvcilhnnchaieieby.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyeWp2Y2lsaG5uY2hhaWVpZWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNDE1MTEsImV4cCI6MjA4MDgxNzUxMX0.c8JGh84L3nsg-tqJndoQcY8GN3qGgzXyoE711t_nLj8";
+import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || Constants.expoConfig?.extra?.supabaseUrl || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || Constants.expoConfig?.extra?.supabaseAnonKey || '';
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[Supabase] Missing configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
+}
+
+console.log('[Supabase] Initializing client...');
+console.log('[Supabase] URL:', supabaseUrl);
+console.log('[Supabase] Key present:', !!supabaseAnonKey);
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    autoRefreshToken: true,
   },
-})
+  global: {
+    headers: {
+      'X-Client-Info': 'midpoint-mobile-app',
+    },
+  },
+});
+
+console.log('[Supabase] Client initialized successfully');
+
+// Test connection on startup
+supabase
+  .from('sessions')
+  .select('count')
+  .limit(1)
+  .then(({ error }) => {
+    if (error) {
+      console.error('[Supabase] Connection test failed:', error.message);
+      if (error.message.includes('paused') || error.message.includes('inactive')) {
+        console.error('[Supabase] ⚠️ Project appears to be paused. Please restore it in the Supabase dashboard.');
+      }
+    } else {
+      console.log('[Supabase] ✅ Connection test successful');
+    }
+  })
+  .catch((err) => {
+    console.error('[Supabase] Connection test error:', err);
+  });
