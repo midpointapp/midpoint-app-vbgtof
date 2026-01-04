@@ -2,46 +2,36 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || Constants.expoConfig?.extra?.supabaseUrl || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || Constants.expoConfig?.extra?.supabaseAnonKey || '';
+const supabaseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[Supabase] Missing configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  console.error('[Supabase] URL or Anon Key is missing!');
 }
 
-console.log('[Supabase] Initializing client...');
-console.log('[Supabase] URL:', supabaseUrl);
-console.log('[Supabase] Key present:', !!supabaseAnonKey);
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
   auth: {
-    persistSession: true,
     autoRefreshToken: true,
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'midpoint-mobile-app',
-    },
+    persistSession: true,
+    detectSessionInUrl: false,
   },
 });
 
-console.log('[Supabase] Client initialized successfully');
+async function testSupabaseConnection() {
+  try {
+    const { data, error, status } = await supabase.from('meet_sessions').select('*').limit(1);
 
-// Test connection on startup
-supabase
-  .from('sessions')
-  .select('count')
-  .limit(1)
-  .then(({ error }) => {
     if (error) {
       console.error('[Supabase] Connection test failed:', error.message);
-      if (error.message.includes('paused') || error.message.includes('inactive')) {
-        console.error('[Supabase] ⚠️ Project appears to be paused. Please restore it in the Supabase dashboard.');
+      if (error.message.includes('project is suspended')) {
+        console.error('[Supabase] Your Supabase project might be paused. Check your dashboard.');
       }
     } else {
-      console.log('[Supabase] ✅ Connection test successful');
+      console.log('[Supabase] ✅ Connection test successful. Status:', status);
     }
-  })
-  .catch((err) => {
-    console.error('[Supabase] Connection test error:', err);
-  });
+  } catch (e: any) {
+    console.error('[Supabase] Connection test exception:', e.message);
+  }
+}
+
+testSupabaseConnection();
