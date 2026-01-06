@@ -152,11 +152,11 @@ export default function FloatingTabBar({
           <View style={styles.tabsContainer}>
             {tabs.map((tab, index) => {
               const isActive = activeTabIndex === index;
-              const uniqueKey = `${tab.name}-${tab.route}`;
+              const uniqueKey = `${tab.route}-${index}`;
 
               return (
-                <React.Fragment key={uniqueKey}>
                 <TouchableOpacity
+                  key={uniqueKey}
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
@@ -179,7 +179,6 @@ export default function FloatingTabBar({
                     </Text>
                   </View>
                 </TouchableOpacity>
-                </React.Fragment>
               );
             })}
           </View>

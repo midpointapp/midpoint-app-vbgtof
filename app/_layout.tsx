@@ -260,6 +260,14 @@ export default function RootLayout() {
                   name="onboarding" 
                   options={{ headerShown: false }} 
                 />
+                {/* Session screen MUST be registered before (tabs) for deep link priority */}
+                <Stack.Screen
+                  name="session"
+                  options={{
+                    headerShown: true,
+                    title: "Meet Session",
+                  }}
+                />
                 <Stack.Screen 
                   name="(tabs)" 
                   options={{ headerShown: false }} 
@@ -270,13 +278,6 @@ export default function RootLayout() {
                     presentation: "modal",
                     headerShown: true,
                     title: "Meet Now",
-                  }}
-                />
-                <Stack.Screen
-                  name="session"
-                  options={{
-                    headerShown: true,
-                    title: "Meet Session",
                   }}
                 />
                 <Stack.Screen

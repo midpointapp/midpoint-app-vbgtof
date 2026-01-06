@@ -1,10 +1,4 @@
 
-import { supabase } from '@/app/integrations/supabase/client';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import React, { useState, useEffect, useRef } from 'react';
-import { generateMidpointPlaces } from '@/utils/sessionUtils';
-import * as Clipboard from 'expo-clipboard';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   View,
   Text,
@@ -17,9 +11,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { Share } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
+import { Share } from 'react-native';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { supabase } from '@/app/integrations/supabase/client';
+import { generateMidpointPlaces } from '@/utils/sessionUtils';
+import * as Clipboard from 'expo-clipboard';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface SessionPlace {
   id: string;
@@ -48,258 +48,615 @@ interface MeetSession {
 }
 
 export default function SessionScreen() {
-  const params = useLocalSearchParams();
-  const sessionId = params.sessionId as string;
-  const inviteToken = params.token as string;
   const router = useRouter();
+  const params = useLocalSearchParams();
   const colors = useThemeColors();
+  const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
+  // Parse params - handle both string and array cases
+  const sessionId = Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId;
+  const token = Array.isArray(params.token) ? params.token[0] : params.token;
+
+  console.log('[Session] Component mounted');
+  console.log('[Session] URL params read:', { sessionId, token, rawParams: params });
+  
   const [session, setSession] = useState<MeetSession | null>(null);
   const [places, setPlaces] = useState<SessionPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [isSender, setIsSender] = useState(false);
 
+  // Validate params on mount
   useEffect(() => {
     if (!sessionId) {
-      setError('Session ID missing');
+      console.error('[Session] Missing sessionId in URL - validation failed');
+      setError('Invalid session link. The URL is missing required parameters. Please check the link and try again.');
       setLoading(false);
       return;
     }
 
-    console.log('[Session] Loading session:', sessionId);
-    loadSession(sessionId, inviteToken);
+    console.log('[Session] Fetch start - loading session:', sessionId);
+    loadSession(sessionId, token || null);
+  }, [sessionId, token]);
 
-    return () => {
-      channelRef.current?.unsubscribe();
-    };
-  }, [sessionId]);
-
+  // Subscribe to realtime updates
   useEffect(() => {
-    if (!session) return;
+    if (!sessionId || !session) return;
+
+    console.log('[Session] Setting up realtime subscription for session:', sessionId);
 
     const channel = supabase
       .channel(`session:${sessionId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meet_sessions', filter: `id=eq.${sessionId}` }, (payload) => {
-        console.log('[Session] Realtime update:', payload);
-        setSession(payload.new as MeetSession);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_places', filter: `session_id=eq.${sessionId}` }, () => {
-        loadSessionPlaces(sessionId);
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'meet_sessions',
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          console.log('[Session] Realtime update received:', payload);
+          if (payload.new) {
+            setSession(payload.new as MeetSession);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'session_places',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        async (payload) => {
+          console.log('[Session] Places update received:', payload);
+          await loadSessionPlaces(sessionId);
+        }
+      )
       .subscribe();
 
-    channelRef.current = channel;
+    subscriptionRef.current = channel;
+
+    return () => {
+      console.log('[Session] Cleaning up realtime subscription');
+      channel.unsubscribe();
+    };
   }, [sessionId, session]);
 
-  async function loadSession(id: string, token: string | null) {
+  const loadSession = async (id: string, accessToken: string | null) => {
     try {
-      const { data, error } = await supabase
+      console.log('[Session] Fetch start - fetching session data from Supabase...');
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
         .from('meet_sessions')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error('Session not found');
+      if (fetchError) {
+        console.error('[Session] Fetch fail - Supabase error:', fetchError);
+        throw new Error(fetchError.message);
+      }
 
-      console.log('[Session] Loaded:', data);
+      if (!data) {
+        console.error('[Session] Fetch fail - session not found in database');
+        throw new Error('Session not found');
+      }
+
+      console.log('[Session] Fetch success - session loaded:', data);
+
+      // Check if expired
+      if (new Date(data.expires_at) < new Date()) {
+        console.error('[Session] Session expired:', data.expires_at);
+        setError('This session has expired. Please create a new meeting session.');
+        setLoading(false);
+        return;
+      }
+
+      // Validate token if provided
+      if (accessToken && data.invite_token !== accessToken) {
+        console.error('[Session] Invalid access token provided');
+        setError('Invalid access token. You do not have permission to view this session.');
+        setLoading(false);
+        return;
+      }
+
       setSession(data);
 
+      // Determine if current user is sender or receiver
+      // For now, assume if receiver_lat is null, we're the receiver
+      const isReceiver = !data.receiver_lat;
+      setIsSender(!isReceiver);
+
+      console.log('[Session] User role determined:', isReceiver ? 'receiver' : 'sender');
+
+      // Load places if they exist
       await loadSessionPlaces(id);
 
-      if (data.status === 'waiting_for_receiver' && !data.receiver_lat) {
+      // If receiver and no location captured yet, capture it
+      if (isReceiver && !data.receiver_lat) {
         await captureReceiverLocation(id, data);
-      } else if (data.status === 'connected' && data.receiver_lat && data.sender_lat) {
+      }
+
+      // If both locations present and no places yet, generate them
+      if (data.sender_lat && data.receiver_lat && places.length === 0) {
         await generatePlaces(id, data);
       }
 
+      console.log('[Session] Session load complete');
       setLoading(false);
     } catch (err: any) {
-      console.error('[Session] Load error:', err.message);
-      setError(err.message);
+      console.error('[Session] Fetch fail - error loading session:', err);
+      setError(err.message || 'Failed to load session. Please check your connection and try again.');
       setLoading(false);
     }
-  }
+  };
 
-  async function loadSessionPlaces(id: string) {
-    const { data, error } = await supabase
-      .from('session_places')
-      .select('*')
-      .eq('session_id', id)
-      .order('rank', { ascending: true });
-
-    if (error) {
-      console.error('[Session] Places load error:', error.message);
-      return;
-    }
-
-    console.log('[Session] Loaded', data?.length || 0, 'places');
-    setPlaces(data || []);
-  }
-
-  async function captureReceiverLocation(id: string, sessionData: MeetSession) {
+  const loadSessionPlaces = async (id: string) => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      console.log('[Session] Loading places for session:', id);
+      const { data, error } = await supabase
+        .from('session_places')
+        .select('*')
+        .eq('session_id', id)
+        .order('rank', { ascending: true });
 
-      const loc = await Location.getCurrentPositionAsync({});
+      if (error) {
+        console.error('[Session] Places fetch error:', error);
+        return;
+      }
+
+      console.log('[Session] Places loaded:', data?.length || 0);
+      setPlaces(data || []);
+    } catch (err) {
+      console.error('[Session] Load places failed:', err);
+    }
+  };
+
+  const captureReceiverLocation = async (id: string, sessionData: MeetSession) => {
+    try {
+      console.log('[Session] Requesting receiver location...');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Location permission is needed to find a meeting point.');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      console.log('[Session] Receiver location captured:', location.coords);
 
       const { error } = await supabase
         .from('meet_sessions')
         .update({
-          receiver_lat: loc.coords.latitude,
-          receiver_lng: loc.coords.longitude,
+          receiver_lat: location.coords.latitude,
+          receiver_lng: location.coords.longitude,
           status: 'connected',
         })
         .eq('id', id);
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        console.error('[Session] Update receiver location error:', error);
+        throw error;
+      }
 
-      console.log('[Session] ✅ Receiver location captured');
-    } catch (err: any) {
-      console.error('[Session] Receiver location error:', err.message);
+      console.log('[Session] Receiver location saved');
+
+      // Trigger place generation
+      await generatePlaces(id, {
+        ...sessionData,
+        receiver_lat: location.coords.latitude,
+        receiver_lng: location.coords.longitude,
+      });
+    } catch (err) {
+      console.error('[Session] Capture location failed:', err);
+      Alert.alert('Error', 'Failed to capture location');
     }
-  }
+  };
 
-  async function generatePlaces(id: string, sessionData: MeetSession) {
-    if (!sessionData.receiver_lat || !sessionData.receiver_lng) return;
+  const generatePlaces = async (id: string, sessionData: MeetSession) => {
+    if (!sessionData.sender_lat || !sessionData.receiver_lat) {
+      console.log('[Session] Cannot generate places - missing coordinates');
+      return;
+    }
 
-    console.log('[Session] Generating places...');
+    try {
+      console.log('[Session] Generating places...');
+      const generatedPlaces = await generateMidpointPlaces(
+        sessionData.sender_lat,
+        sessionData.sender_lng,
+        sessionData.receiver_lat,
+        sessionData.receiver_lng,
+        sessionData.type
+      );
 
-    const results = await generateMidpointPlaces(
-      id,
-      sessionData.sender_lat,
-      sessionData.sender_lng,
-      sessionData.receiver_lat,
-      sessionData.receiver_lng,
-      sessionData.type
-    );
+      console.log('[Session] Places generated:', generatedPlaces.length);
 
-    if (results.length > 0) {
+      if (generatedPlaces.length === 0) {
+        console.warn('[Session] No places found');
+        return;
+      }
+
+      // Save to database
+      const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
+        session_id: id,
+        place_id: place.place_id || `place_${index}`,
+        name: place.name,
+        address: place.address || '',
+        lat: place.latitude,
+        lng: place.longitude,
+        rank: index + 1,
+      }));
+
+      const { error } = await supabase
+        .from('session_places')
+        .insert(placesToInsert);
+
+      if (error) {
+        console.error('[Session] Insert places error:', error);
+        throw error;
+      }
+
+      console.log('[Session] Places saved to DB');
       await loadSessionPlaces(id);
+    } catch (err) {
+      console.error('[Session] Generate places failed:', err);
     }
-  }
+  };
 
-  async function handleProposePlace(place: SessionPlace) {
-    const { error } = await supabase
-      .from('meet_sessions')
-      .update({ proposed_place_id: place.place_id, status: 'proposed' })
-      .eq('id', sessionId);
+  const handleProposePlace = async (place: SessionPlace) => {
+    if (!session) return;
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    try {
+      const { error } = await supabase
+        .from('meet_sessions')
+        .update({
+          proposed_place_id: place.place_id,
+          status: 'proposed',
+        })
+        .eq('id', session.id);
+
+      if (error) throw error;
+
+      Alert.alert('Success', `Proposed: ${place.name}`);
+    } catch (err) {
+      console.error('[Session] Propose failed:', err);
+      Alert.alert('Error', 'Failed to propose place');
     }
-  }
+  };
 
-  async function handleAgreePlace() {
-    const { error } = await supabase
-      .from('meet_sessions')
-      .update({ confirmed_place_id: session?.proposed_place_id, status: 'confirmed' })
-      .eq('id', sessionId);
+  const handleAgreePlace = async () => {
+    if (!session || !session.proposed_place_id) return;
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    try {
+      const { error } = await supabase
+        .from('meet_sessions')
+        .update({
+          confirmed_place_id: session.proposed_place_id,
+          status: 'confirmed',
+        })
+        .eq('id', session.id);
+
+      if (error) throw error;
+
+      Alert.alert('Confirmed!', 'Meeting place confirmed');
+    } catch (err) {
+      console.error('[Session] Agree failed:', err);
+      Alert.alert('Error', 'Failed to confirm place');
     }
-  }
+  };
 
-  async function handleDenyPlace() {
-    const { error } = await supabase
-      .from('meet_sessions')
-      .update({ proposed_place_id: null, status: 'connected' })
-      .eq('id', sessionId);
+  const handleDenyPlace = async () => {
+    if (!session) return;
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    try {
+      const { error } = await supabase
+        .from('meet_sessions')
+        .update({
+          proposed_place_id: null,
+          status: 'connected',
+        })
+        .eq('id', session.id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('[Session] Deny failed:', err);
+      Alert.alert('Error', 'Failed to deny proposal');
     }
-  }
+  };
 
-  function handleGetDirections(place: SessionPlace) {
+  const handleGetDirections = (place: SessionPlace) => {
     const url = Platform.select({
       ios: `maps://app?daddr=${place.lat},${place.lng}`,
-      android: `geo:0,0?q=${place.lat},${place.lng}(${place.name})`,
+      android: `google.navigation:q=${place.lat},${place.lng}`,
       default: `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`,
     });
+
     Linking.openURL(url!);
-  }
+  };
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
+  // Error state
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.button}>
-          <Text style={styles.buttonText}>Go Back</Text>
-        </TouchableOpacity>
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="error-outline" size={64} color={colors.error} />
+          <Text style={[styles.errorTitle, { color: colors.text }]}>Session Error</Text>
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }]}
+            onPress={() => router.push('/(tabs)/(home)/')}
+          >
+            <Text style={styles.buttonText}>Go Home</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
+  // Loading state
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  const proposedPlace = places.find((p) => p.place_id === session.proposed_place_id);
+  const confirmedPlace = places.find((p) => p.place_id === session.confirmed_place_id);
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Session: {session?.type}</Text>
-      <Text style={[styles.status, { color: colors.text }]}>Status: {session?.status}</Text>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {session.type} Meetup
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Status: {session.status.replace(/_/g, ' ')}
+          </Text>
+        </View>
 
-      {session?.status === 'waiting_for_receiver' && (
-        <Text style={[styles.info, { color: colors.text }]}>Waiting for receiver to join...</Text>
-      )}
+        {/* Waiting state */}
+        {session.status === 'waiting_for_receiver' && (
+          <View style={styles.statusCard}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+              Waiting for other person to share location...
+            </Text>
+          </View>
+        )}
 
-      {places.length > 0 && (
-        <View style={styles.placesContainer}>
-          <Text style={[styles.subtitle, { color: colors.text }]}>Meeting Place Options ({places.length})</Text>
-          {places.map((place, index) => (
-            <View key={place.place_id} style={[styles.placeCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.placeName, { color: colors.text }]}>{place.name}</Text>
-              <Text style={[styles.placeAddress, { color: colors.text }]}>{place.address}</Text>
-              <View style={styles.placeActions}>
-                <TouchableOpacity onPress={() => handleProposePlace(place)} style={styles.button}>
-                  <Text style={styles.buttonText}>Propose</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleGetDirections(place)} style={styles.button}>
-                  <Text style={styles.buttonText}>Directions</Text>
-                </TouchableOpacity>
+        {/* Places list */}
+        {places.length > 0 && session.status !== 'confirmed' && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Meeting Place Options ({places.length})
+            </Text>
+            {places.map((place) => (
+              <View key={place.id} style={[styles.placeCard, { backgroundColor: colors.card }]}>
+                <View style={styles.placeInfo}>
+                  <Text style={[styles.placeName, { color: colors.text }]}>{place.name}</Text>
+                  <Text style={[styles.placeAddress, { color: colors.textSecondary }]}>
+                    {place.address}
+                  </Text>
+                </View>
+                <View style={styles.placeActions}>
+                  {isSender && session.status === 'connected' && (
+                    <TouchableOpacity
+                      style={[styles.proposeButton, { backgroundColor: colors.primary }]}
+                      onPress={() => handleProposePlace(place)}
+                    >
+                      <Text style={styles.buttonText}>Propose</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.directionsButton, { borderColor: colors.primary }]}
+                    onPress={() => handleGetDirections(place)}
+                  >
+                    <MaterialIcons name="directions" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
 
-      {session?.status === 'proposed' && session.proposed_place_id && (
-        <View style={styles.proposalActions}>
-          <TouchableOpacity onPress={handleAgreePlace} style={[styles.button, styles.agreeButton]}>
-            <Text style={styles.buttonText}>✅ Agree</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleDenyPlace} style={[styles.button, styles.denyButton]}>
-            <Text style={styles.buttonText}>❌ Deny</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {/* Proposed place */}
+        {session.status === 'proposed' && proposedPlace && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Proposed Meeting Place</Text>
+            <View style={[styles.placeCard, styles.proposedCard, { backgroundColor: colors.card }]}>
+              <View style={styles.placeInfo}>
+                <Text style={[styles.placeName, { color: colors.text }]}>{proposedPlace.name}</Text>
+                <Text style={[styles.placeAddress, { color: colors.textSecondary }]}>
+                  {proposedPlace.address}
+                </Text>
+              </View>
+              {!isSender && (
+                <View style={styles.proposalActions}>
+                  <TouchableOpacity
+                    style={[styles.agreeButton, { backgroundColor: colors.success }]}
+                    onPress={handleAgreePlace}
+                  >
+                    <Text style={styles.buttonText}>Agree</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.denyButton, { backgroundColor: colors.error }]}
+                    onPress={handleDenyPlace}
+                  >
+                    <Text style={styles.buttonText}>Deny</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Confirmed place */}
+        {session.status === 'confirmed' && confirmedPlace && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>✅ Confirmed Meeting Place</Text>
+            <View style={[styles.placeCard, styles.confirmedCard, { backgroundColor: colors.card }]}>
+              <View style={styles.placeInfo}>
+                <Text style={[styles.placeName, { color: colors.text }]}>{confirmedPlace.name}</Text>
+                <Text style={[styles.placeAddress, { color: colors.textSecondary }]}>
+                  {confirmedPlace.address}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: colors.primary }]}
+                onPress={() => handleGetDirections(confirmedPlace)}
+              >
+                <MaterialIcons name="directions" size={20} color="#fff" />
+                <Text style={styles.buttonText}>Get Directions</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
-  status: { fontSize: 16, marginBottom: 20 },
-  info: { fontSize: 14, marginBottom: 20 },
-  errorText: { fontSize: 16, textAlign: 'center', marginTop: 50 },
-  subtitle: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
-  placesContainer: { marginTop: 20 },
-  placeCard: { padding: 15, borderRadius: 12, marginBottom: 12 },
-  placeName: { fontSize: 16, fontWeight: '600', marginBottom: 5 },
-  placeAddress: { fontSize: 14, marginBottom: 10 },
-  placeActions: { flexDirection: 'row', gap: 10 },
-  button: { backgroundColor: '#007AFF', padding: 10, borderRadius: 8, flex: 1, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  proposalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  agreeButton: { backgroundColor: '#34C759' },
-  denyButton: { backgroundColor: '#FF3B30' },
+  container: {
+    flex: 1,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    padding: 16,
+    paddingTop: 60,
+  },
+  header: {
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  statusText: {
+    fontSize: 16,
+  },
+  placeCard: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  proposedCard: {
+    borderWidth: 2,
+    borderColor: '#FFA500',
+  },
+  confirmedCard: {
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  placeInfo: {
+    flex: 1,
+    marginBottom: 12,
+  },
+  placeName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  placeAddress: {
+    fontSize: 14,
+  },
+  placeActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  proposeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  directionsButton: {
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  proposalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  agreeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  denyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  button: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
 });
