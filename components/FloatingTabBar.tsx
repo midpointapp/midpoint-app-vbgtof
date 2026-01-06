@@ -12,6 +12,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { BlurView } from 'expo-blur';
+import { useTheme } from '@react-navigation/native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -20,7 +21,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href } from 'expo-router';
-import { colors } from '@/styles/commonStyles';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -40,12 +40,13 @@ interface FloatingTabBarProps {
 
 export default function FloatingTabBar({
   tabs,
-  containerWidth = screenWidth * 0.9,
+  containerWidth = screenWidth / 2.5,
   borderRadius = 35,
   bottomMargin
 }: FloatingTabBarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const theme = useTheme();
   const animatedValue = useSharedValue(0);
 
   const activeTabIndex = React.useMemo(() => {
@@ -108,17 +109,23 @@ export default function FloatingTabBar({
   const dynamicStyles = {
     blurContainer: {
       ...styles.blurContainer,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderWidth: 1.2,
+      borderColor: 'rgba(255, 255, 255, 1)',
       ...Platform.select({
         ios: {
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          backgroundColor: theme.dark
+            ? 'rgba(28, 28, 30, 0.8)'
+            : 'rgba(255, 255, 255, 0.6)',
         },
         android: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: theme.dark
+            ? 'rgba(28, 28, 30, 0.95)'
+            : 'rgba(255, 255, 255, 0.6)',
         },
         web: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: theme.dark
+            ? 'rgba(28, 28, 30, 0.95)'
+            : 'rgba(255, 255, 255, 0.6)',
           backdropFilter: 'blur(10px)',
         },
       }),
@@ -128,8 +135,9 @@ export default function FloatingTabBar({
     },
     indicator: {
       ...styles.indicator,
-      backgroundColor: colors.primary,
-      opacity: 0.1,
+      backgroundColor: theme.dark
+        ? 'rgba(255, 255, 255, 0.08)'
+        : 'rgba(0, 0, 0, 0.04)',
       width: `${tabWidthPercent}%` as `${number}%`,
     },
   };
@@ -152,11 +160,10 @@ export default function FloatingTabBar({
           <View style={styles.tabsContainer}>
             {tabs.map((tab, index) => {
               const isActive = activeTabIndex === index;
-              const uniqueKey = `${tab.route}-${index}`;
 
               return (
                 <TouchableOpacity
-                  key={uniqueKey}
+                  key={`${tab.route}-${tab.name}`}
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
@@ -166,13 +173,13 @@ export default function FloatingTabBar({
                       android_material_icon_name={tab.icon}
                       ios_icon_name={tab.icon}
                       size={24}
-                      color={isActive ? colors.primary : colors.textSecondary}
+                      color={isActive ? theme.colors.primary : (theme.dark ? '#98989D' : '#000000')}
                     />
                     <Text
                       style={[
                         styles.tabLabel,
-                        { color: colors.textSecondary },
-                        isActive && { color: colors.primary, fontWeight: '600' },
+                        { color: theme.dark ? '#98989D' : '#8E8E93' },
+                        isActive && { color: theme.colors.primary, fontWeight: '600' },
                       ]}
                     >
                       {tab.label}

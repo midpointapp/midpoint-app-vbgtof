@@ -3,7 +3,7 @@ import { Alert, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { generateId } from './idGenerator';
 import { supabase } from '../app/integrations/supabase/client';
-import { searchNearbyPlaces } from './locationUtils';
+import { searchNearbyPlaces, Place } from './locationUtils';
 import Constants from 'expo-constants';
 
 const WEB_BASE_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_WEB_BASE_URL || process.env.EXPO_PUBLIC_WEB_BASE_URL;
@@ -13,6 +13,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
   const inviteToken = generateId();
   const expiresAt = new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).toISOString();
 
+  // FIXED: Use /session route instead of /?
   const inviteUrl = `${WEB_BASE_URL}/session?sessionId=${sessionId}&token=${inviteToken}`;
 
   try {
@@ -56,7 +57,69 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
   }
 }
 
+/**
+ * Generate midpoint places for a session
+ * FIXED: This is the function that should be called from session.tsx
+ * It calculates midpoint and searches for places, returning Place[] directly
+ */
 export async function generateMidpointPlaces(
+  senderLat: number,
+  senderLng: number,
+  receiverLat: number,
+  receiverLng: number,
+  category: string
+): Promise<Place[]> {
+  try {
+    // CRITICAL FIX: Validate coordinates before calculating midpoint
+    if (typeof senderLat !== 'number' || typeof senderLng !== 'number' ||
+        typeof receiverLat !== 'number' || typeof receiverLng !== 'number') {
+      console.error('[SessionUtils] Invalid coordinates - not numbers:', {
+        senderLat, senderLng, receiverLat, receiverLng,
+        types: {
+          senderLat: typeof senderLat,
+          senderLng: typeof senderLng,
+          receiverLat: typeof receiverLat,
+          receiverLng: typeof receiverLng
+        }
+      });
+      return [];
+    }
+
+    if (isNaN(senderLat) || isNaN(senderLng) || isNaN(receiverLat) || isNaN(receiverLng)) {
+      console.error('[SessionUtils] Invalid coordinates - NaN values:', {
+        senderLat, senderLng, receiverLat, receiverLng
+      });
+      return [];
+    }
+
+    const midLat = (senderLat + receiverLat) / 2;
+    const midLng = (senderLng + receiverLng) / 2;
+
+    console.log('[SessionUtils] ✅ Midpoint calculated:', { midLat, midLng });
+
+    // CRITICAL FIX: Validate midpoint before calling Places API
+    if (isNaN(midLat) || isNaN(midLng)) {
+      console.error('[SessionUtils] Midpoint calculation resulted in NaN:', { midLat, midLng });
+      return [];
+    }
+
+    console.log('[SessionUtils] Calling searchNearbyPlaces with:', { midLat, midLng, category });
+    const places = await searchNearbyPlaces(midLat, midLng, category);
+
+    console.log('[SessionUtils] Places API returned', places.length, 'results');
+
+    return places.slice(0, 3);
+  } catch (error: any) {
+    console.error('[SessionUtils] Error generating places:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Legacy function that saves places to database
+ * This is used by the old meet-session flow
+ */
+export async function generateAndSaveMidpointPlaces(
   sessionId: string,
   senderLat: number,
   senderLng: number,
@@ -65,27 +128,23 @@ export async function generateMidpointPlaces(
   category: string
 ) {
   try {
-    const midLat = (senderLat + receiverLat) / 2;
-    const midLng = (senderLng + receiverLng) / 2;
+    const places = await generateMidpointPlaces(senderLat, senderLng, receiverLat, receiverLng, category);
 
-    console.log('[SessionUtils] Midpoint:', { midLat, midLng });
-
-    const places = await searchNearbyPlaces(midLat, midLng, category);
-
-    console.log('[SessionUtils] Places API returned', places.length, 'results');
-
-    const top3Places = places.slice(0, 3);
+    if (places.length === 0) {
+      console.warn('[SessionUtils] No places to save');
+      return [];
+    }
 
     const { error } = await supabase
       .from('session_places')
       .insert(
-        top3Places.map((place, index) => ({
+        places.map((place, index) => ({
           session_id: sessionId,
-          place_id: place.place_id,
+          place_id: place.placeId || place.id,
           name: place.name,
           address: place.address,
-          lat: place.lat,
-          lng: place.lng,
+          lat: place.latitude,
+          lng: place.longitude,
           rank: index + 1,
         }))
       );
@@ -95,11 +154,11 @@ export async function generateMidpointPlaces(
       throw new Error(error.message);
     }
 
-    console.log('[SessionUtils] ✅ Saved', top3Places.length, 'places');
+    console.log('[SessionUtils] ✅ Saved', places.length, 'places');
 
-    return top3Places;
+    return places;
   } catch (error: any) {
-    console.error('[SessionUtils] Error generating places:', error.message);
+    console.error('[SessionUtils] Error generating and saving places:', error.message);
     return [];
   }
 }

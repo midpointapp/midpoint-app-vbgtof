@@ -160,6 +160,24 @@ export async function searchNearbyPlaces(
   midLng: number,
   meetupType: string
 ): Promise<Place[]> {
+  // CRITICAL FIX: Validate coordinates before making API call
+  if (typeof midLat !== 'number' || typeof midLng !== 'number') {
+    console.error('[Places] Invalid coordinates - not numbers:', { midLat, midLng, types: { lat: typeof midLat, lng: typeof midLng } });
+    return [];
+  }
+
+  if (isNaN(midLat) || isNaN(midLng)) {
+    console.error('[Places] Invalid coordinates - NaN values:', { midLat, midLng });
+    return [];
+  }
+
+  if (midLat < -90 || midLat > 90 || midLng < -180 || midLng > 180) {
+    console.error('[Places] Invalid coordinates - out of range:', { midLat, midLng });
+    return [];
+  }
+
+  console.log('[Places] ✅ Coordinates validated:', { midLat, midLng });
+  
   // Log API key status
   console.log('[Places] API key present:', !!GOOGLE_PLACES_API_KEY);
   console.log('[Places] API key length:', GOOGLE_PLACES_API_KEY?.length || 0);
@@ -195,6 +213,11 @@ export async function searchNearbyPlaces(
     const data = await response.json();
 
     console.log('[Places] API response status:', data.status);
+    
+    // IMPROVED ERROR LOGGING: Print full error details
+    if (data.error_message) {
+      console.error('[Places] API error_message:', data.error_message);
+    }
 
     if (data.status === 'OK' && data.results && data.results.length > 0) {
       console.log('[Places] API returned', data.results.length, 'results');
@@ -234,13 +257,14 @@ export async function searchNearbyPlaces(
       console.log('[Places] No places found in the area');
       return [];
     } else if (data.status === 'REQUEST_DENIED') {
-      console.error('[Places] API request denied:', data.error_message);
+      console.error('[Places] API request denied. Status:', data.status, 'Error:', data.error_message || 'No error message');
       throw new Error(`API request denied: ${data.error_message || 'Check your API key and billing'}`);
     } else if (data.status === 'INVALID_REQUEST') {
-      console.error('[Places] Invalid request:', data.error_message);
+      console.error('[Places] Invalid request. Status:', data.status, 'Error:', data.error_message || 'No error message');
+      console.error('[Places] Request params:', { location, radius, type, keyword });
       throw new Error(`Invalid request: ${data.error_message || 'Check request parameters'}`);
     } else {
-      console.error('[Places] API error:', data.status, data.error_message);
+      console.error('[Places] API error. Status:', data.status, 'Error:', data.error_message || 'No error message');
       throw new Error(`API error: ${data.status} - ${data.error_message || 'Unknown error'}`);
     }
   } catch (error: any) {

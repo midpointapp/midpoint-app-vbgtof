@@ -25,7 +25,8 @@ export function generateShareUrl(meetPointId: string): string {
 
 /**
  * Generate a session URL with sessionId and token (new flow)
+ * FIXED: Changed from /? to /session? for proper routing
  */
 export function generateSessionUrl(sessionId: string, token: string): string {
-  return `${WEB_BASE_URL}/?sessionId=${sessionId}&token=${token}`;
+  return `${WEB_BASE_URL}/session?sessionId=${sessionId}&token=${token}`;
 }
