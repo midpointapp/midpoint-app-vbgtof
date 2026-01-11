@@ -150,9 +150,10 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
             ]}
           />
           <View style={styles.tabsContainer}>
-            {tabs.map((tab) => {
-              const isActive = activeTabIndex === tabs.indexOf(tab);
-              const uniqueKey = `${tab.name}-${tab.route}`;
+            {tabs.map((tab, index) => {
+              const isActive = activeTabIndex === index;
+              // CRITICAL FIX: Use stable unique key combining route and name
+              const uniqueKey = `tab-${tab.name}-${tab.route}`;
 
               return (
                 <TouchableOpacity
@@ -214,8 +215,8 @@ export default function TabLayout() {
           animation: 'none',
         }}
       >
-        <Stack.Screen key="home" name="(home)" />
-        <Stack.Screen key="profile" name="profile" />
+        <Stack.Screen key="home-stack" name="(home)" />
+        <Stack.Screen key="profile-stack" name="profile" />
       </Stack>
       <FloatingTabBar tabs={tabs} />
     </>

@@ -53,12 +53,14 @@ export default function SessionScreen() {
   const colors = useThemeColors();
   const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
-  // Parse params - handle both string and array cases
+  // CRITICAL FIX: Parse params - handle both string and array cases
   const sessionId = Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId;
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
 
-  console.log('[Session] Component mounted');
+  console.log('[Session] ========== SESSION SCREEN MOUNTED ==========');
   console.log('[Session] URL params read:', { sessionId, token, rawParams: params });
+  console.log('[Session] Platform:', Platform.OS);
+  console.log('[Session] Timestamp:', new Date().toISOString());
   
   const [session, setSession] = useState<MeetSession | null>(null);
   const [places, setPlaces] = useState<SessionPlace[]>([]);
@@ -66,16 +68,20 @@ export default function SessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
 
-  // Validate params on mount
+  // CRITICAL FIX: Validate params on mount - DO NOT redirect before validation
   useEffect(() => {
+    console.log('[Session] useEffect triggered - validating params...');
+    
     if (!sessionId) {
-      console.error('[Session] Missing sessionId in URL - validation failed');
-      setError('Invalid session link. The URL is missing required parameters. Please check the link and try again.');
+      console.error('[Session] ❌ VALIDATION FAILED - Missing sessionId in URL');
+      console.error('[Session] Raw params:', JSON.stringify(params, null, 2));
+      setError('Invalid session link. The URL is missing the session ID. Please check the link and try again.');
       setLoading(false);
       return;
     }
 
-    console.log('[Session] Fetch start - loading session:', sessionId);
+    console.log('[Session] ✅ Validation passed - sessionId present:', sessionId);
+    console.log('[Session] Fetch start - loading session...');
     loadSession(sessionId, token || null);
   }, [sessionId, token]);
 
@@ -128,6 +134,8 @@ export default function SessionScreen() {
   const loadSession = async (id: string, accessToken: string | null) => {
     try {
       console.log('[Session] Fetch start - fetching session data from Supabase...');
+      console.log('[Session] Session ID:', id);
+      console.log('[Session] Access token present:', !!accessToken);
       setLoading(true);
       setError(null);
 
@@ -138,20 +146,20 @@ export default function SessionScreen() {
         .single();
 
       if (fetchError) {
-        console.error('[Session] Fetch fail - Supabase error:', fetchError);
+        console.error('[Session] ❌ Fetch fail - Supabase error:', fetchError);
         throw new Error(fetchError.message);
       }
 
       if (!data) {
-        console.error('[Session] Fetch fail - session not found in database');
+        console.error('[Session] ❌ Fetch fail - session not found in database');
         throw new Error('Session not found');
       }
 
-      console.log('[Session] Fetch success - session loaded:', data);
+      console.log('[Session] ✅ Fetch success - session loaded:', data);
 
       // Check if expired
       if (new Date(data.expires_at) < new Date()) {
-        console.error('[Session] Session expired:', data.expires_at);
+        console.error('[Session] ❌ Session expired:', data.expires_at);
         setError('This session has expired. Please create a new meeting session.');
         setLoading(false);
         return;
@@ -159,7 +167,7 @@ export default function SessionScreen() {
 
       // Validate token if provided
       if (accessToken && data.invite_token !== accessToken) {
-        console.error('[Session] Invalid access token provided');
+        console.error('[Session] ❌ Invalid access token provided');
         setError('Invalid access token. You do not have permission to view this session.');
         setLoading(false);
         return;
@@ -179,18 +187,25 @@ export default function SessionScreen() {
 
       // If receiver and no location captured yet, capture it
       if (isReceiver && !data.receiver_lat) {
+        console.log('[Session] Receiver needs to capture location...');
         await captureReceiverLocation(id, data);
       }
 
       // If both locations present and no places yet, generate them
       if (data.sender_lat && data.receiver_lat && places.length === 0) {
+        console.log('[Session] Both locations present, generating places...');
         await generatePlaces(id, data);
       }
 
-      console.log('[Session] Session load complete');
+      console.log('[Session] ✅ Session load complete');
       setLoading(false);
     } catch (err: any) {
-      console.error('[Session] Fetch fail - error loading session:', err);
+      console.error('[Session] ❌ Fetch fail - error loading session:', err);
+      console.error('[Session] Error details:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name
+      });
       setError(err.message || 'Failed to load session. Please check your connection and try again.');
       setLoading(false);
     }
@@ -206,29 +221,31 @@ export default function SessionScreen() {
         .order('rank', { ascending: true });
 
       if (error) {
-        console.error('[Session] Places fetch error:', error);
+        console.error('[Session] ❌ Places fetch error:', error);
         return;
       }
 
-      console.log('[Session] Places loaded:', data?.length || 0);
+      console.log('[Session] ✅ Places loaded:', data?.length || 0);
       setPlaces(data || []);
     } catch (err) {
-      console.error('[Session] Load places failed:', err);
+      console.error('[Session] ❌ Load places failed:', err);
     }
   };
 
   const captureReceiverLocation = async (id: string, sessionData: MeetSession) => {
     try {
-      console.log('[Session] Requesting receiver location...');
+      console.log('[Session] Requesting receiver location permissions...');
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
+        console.error('[Session] ❌ Location permission denied');
         Alert.alert('Permission Required', 'Location permission is needed to find a meeting point.');
         return;
       }
 
+      console.log('[Session] Getting receiver location...');
       const location = await Location.getCurrentPositionAsync({});
-      console.log('[Session] Receiver location captured:', location.coords);
+      console.log('[Session] ✅ Receiver location captured:', location.coords);
 
       const { error } = await supabase
         .from('meet_sessions')
@@ -240,11 +257,11 @@ export default function SessionScreen() {
         .eq('id', id);
 
       if (error) {
-        console.error('[Session] Update receiver location error:', error);
+        console.error('[Session] ❌ Update receiver location error:', error);
         throw error;
       }
 
-      console.log('[Session] Receiver location saved');
+      console.log('[Session] ✅ Receiver location saved to database');
 
       // Trigger place generation
       await generatePlaces(id, {
@@ -253,19 +270,51 @@ export default function SessionScreen() {
         receiver_lng: location.coords.longitude,
       });
     } catch (err) {
-      console.error('[Session] Capture location failed:', err);
+      console.error('[Session] ❌ Capture location failed:', err);
       Alert.alert('Error', 'Failed to capture location');
     }
   };
 
   const generatePlaces = async (id: string, sessionData: MeetSession) => {
+    // CRITICAL FIX: Validate coordinates before calling Places API
     if (!sessionData.sender_lat || !sessionData.receiver_lat) {
-      console.log('[Session] Cannot generate places - missing coordinates');
+      console.log('[Session] ⚠️ Cannot generate places - missing coordinates');
+      console.log('[Session] Sender lat:', sessionData.sender_lat, 'Receiver lat:', sessionData.receiver_lat);
+      return;
+    }
+
+    // CRITICAL FIX: Validate coordinates are valid numbers
+    if (typeof sessionData.sender_lat !== 'number' || typeof sessionData.sender_lng !== 'number' ||
+        typeof sessionData.receiver_lat !== 'number' || typeof sessionData.receiver_lng !== 'number') {
+      console.error('[Session] ❌ Invalid coordinate types:', {
+        senderLat: typeof sessionData.sender_lat,
+        senderLng: typeof sessionData.sender_lng,
+        receiverLat: typeof sessionData.receiver_lat,
+        receiverLng: typeof sessionData.receiver_lng
+      });
+      return;
+    }
+
+    if (isNaN(sessionData.sender_lat) || isNaN(sessionData.sender_lng) ||
+        isNaN(sessionData.receiver_lat) || isNaN(sessionData.receiver_lng)) {
+      console.error('[Session] ❌ Coordinates are NaN:', {
+        senderLat: sessionData.sender_lat,
+        senderLng: sessionData.sender_lng,
+        receiverLat: sessionData.receiver_lat,
+        receiverLng: sessionData.receiver_lng
+      });
       return;
     }
 
     try {
-      console.log('[Session] Generating places...');
+      console.log('[Session] Generating places with coordinates:', {
+        senderLat: sessionData.sender_lat,
+        senderLng: sessionData.sender_lng,
+        receiverLat: sessionData.receiver_lat,
+        receiverLng: sessionData.receiver_lng,
+        type: sessionData.type
+      });
+
       const generatedPlaces = await generateMidpointPlaces(
         sessionData.sender_lat,
         sessionData.sender_lng,
@@ -274,17 +323,17 @@ export default function SessionScreen() {
         sessionData.type
       );
 
-      console.log('[Session] Places generated:', generatedPlaces.length);
+      console.log('[Session] ✅ Places generated:', generatedPlaces.length);
 
       if (generatedPlaces.length === 0) {
-        console.warn('[Session] No places found');
+        console.warn('[Session] ⚠️ No places found in the area');
         return;
       }
 
       // Save to database
       const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
         session_id: id,
-        place_id: place.place_id || `place_${index}`,
+        place_id: place.placeId || `place_${index}`,
         name: place.name,
         address: place.address || '',
         lat: place.latitude,
@@ -297,14 +346,18 @@ export default function SessionScreen() {
         .insert(placesToInsert);
 
       if (error) {
-        console.error('[Session] Insert places error:', error);
+        console.error('[Session] ❌ Insert places error:', error);
         throw error;
       }
 
-      console.log('[Session] Places saved to DB');
+      console.log('[Session] ✅ Places saved to database');
       await loadSessionPlaces(id);
-    } catch (err) {
-      console.error('[Session] Generate places failed:', err);
+    } catch (err: any) {
+      console.error('[Session] ❌ Generate places failed:', err);
+      console.error('[Session] Error details:', {
+        message: err.message,
+        stack: err.stack
+      });
     }
   };
 
@@ -379,7 +432,7 @@ export default function SessionScreen() {
     Linking.openURL(url!);
   };
 
-  // Error state
+  // IMPROVED ERROR STATE: Show friendly error UI with clear message
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -398,12 +451,15 @@ export default function SessionScreen() {
     );
   }
 
-  // Loading state
+  // IMPROVED LOADING STATE: Show clear loading message
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading session...</Text>
+        <Text style={[styles.loadingSubtext, { color: colors.textSecondary }]}>
+          {sessionId ? `Session ID: ${sessionId.substring(0, 8)}...` : 'Validating...'}
+        </Text>
       </View>
     );
   }
@@ -643,6 +699,10 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
   },
   errorContainer: {
     alignItems: 'center',

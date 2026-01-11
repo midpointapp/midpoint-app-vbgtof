@@ -150,6 +150,7 @@ export function getGooglePlacesType(meetupType: string): { type?: string; keywor
 
 /**
  * Search for nearby places using Google Places API
+ * CRITICAL FIX: Enhanced coordinate validation and error logging
  * @param midLat - Midpoint latitude
  * @param midLng - Midpoint longitude
  * @param meetupType - Type of meetup (police, gas, restaurant, cafe, shopping_mall, park, point_of_interest)
@@ -160,33 +161,52 @@ export async function searchNearbyPlaces(
   midLng: number,
   meetupType: string
 ): Promise<Place[]> {
-  // CRITICAL FIX: Validate coordinates before making API call
+  console.log('[Places] ========== SEARCH NEARBY PLACES ==========');
+  console.log('[Places] Input params:', { midLat, midLng, meetupType });
+  console.log('[Places] Param types:', { 
+    midLat: typeof midLat, 
+    midLng: typeof midLng, 
+    meetupType: typeof meetupType 
+  });
+
+  // CRITICAL FIX: Comprehensive coordinate validation
   if (typeof midLat !== 'number' || typeof midLng !== 'number') {
-    console.error('[Places] Invalid coordinates - not numbers:', { midLat, midLng, types: { lat: typeof midLat, lng: typeof midLng } });
+    console.error('[Places] ❌ VALIDATION FAILED - Coordinates are not numbers');
+    console.error('[Places] midLat:', midLat, 'type:', typeof midLat);
+    console.error('[Places] midLng:', midLng, 'type:', typeof midLng);
     return [];
   }
 
   if (isNaN(midLat) || isNaN(midLng)) {
-    console.error('[Places] Invalid coordinates - NaN values:', { midLat, midLng });
+    console.error('[Places] ❌ VALIDATION FAILED - Coordinates are NaN');
+    console.error('[Places] midLat:', midLat);
+    console.error('[Places] midLng:', midLng);
     return [];
   }
 
-  if (midLat < -90 || midLat > 90 || midLng < -180 || midLng > 180) {
-    console.error('[Places] Invalid coordinates - out of range:', { midLat, midLng });
+  if (midLat < -90 || midLat > 90) {
+    console.error('[Places] ❌ VALIDATION FAILED - Latitude out of range [-90, 90]');
+    console.error('[Places] midLat:', midLat);
     return [];
   }
 
-  console.log('[Places] ✅ Coordinates validated:', { midLat, midLng });
-  
-  // Log API key status
-  console.log('[Places] API key present:', !!GOOGLE_PLACES_API_KEY);
-  console.log('[Places] API key length:', GOOGLE_PLACES_API_KEY?.length || 0);
+  if (midLng < -180 || midLng > 180) {
+    console.error('[Places] ❌ VALIDATION FAILED - Longitude out of range [-180, 180]');
+    console.error('[Places] midLng:', midLng);
+    return [];
+  }
+
+  console.log('[Places] ✅ Coordinates validated successfully');
   
   // Check if API key is configured
   if (!GOOGLE_PLACES_API_KEY || GOOGLE_PLACES_API_KEY === 'YOUR_GOOGLE_API_KEY_HERE') {
-    console.error('[Places] Google Places API key not configured');
+    console.error('[Places] ❌ Google Places API key not configured');
+    console.error('[Places] API key present:', !!GOOGLE_PLACES_API_KEY);
+    console.error('[Places] API key value:', GOOGLE_PLACES_API_KEY?.substring(0, 10) + '...');
     throw new Error('Google Places API key not configured. Please add your API key in constants/config.ts');
   }
+
+  console.log('[Places] ✅ API key present, length:', GOOGLE_PLACES_API_KEY.length);
 
   const { type, keyword } = getGooglePlacesType(meetupType);
   const location = `${midLat},${midLng}`;
@@ -205,31 +225,36 @@ export async function searchNearbyPlaces(
   
   url += `&key=${GOOGLE_PLACES_API_KEY}`;
 
-  console.log('[Places] Searching Google Places API:', { midLat, midLng, meetupType, type, keyword, radius });
-  console.log('[Places] Request URL (without key):', url.replace(GOOGLE_PLACES_API_KEY, 'REDACTED'));
+  console.log('[Places] Request params:', { location, radius, type, keyword });
+  console.log('[Places] Request URL (key redacted):', url.replace(GOOGLE_PLACES_API_KEY, 'REDACTED'));
 
   try {
+    console.log('[Places] Sending request to Google Places API...');
     const response = await fetch(url);
+    
+    console.log('[Places] Response status:', response.status);
+    console.log('[Places] Response ok:', response.ok);
+    
     const data = await response.json();
 
     console.log('[Places] API response status:', data.status);
     
-    // IMPROVED ERROR LOGGING: Print full error details
+    // CRITICAL FIX: Enhanced error logging with full details
     if (data.error_message) {
-      console.error('[Places] API error_message:', data.error_message);
+      console.error('[Places] ❌ API error_message:', data.error_message);
     }
 
     if (data.status === 'OK' && data.results && data.results.length > 0) {
-      console.log('[Places] API returned', data.results.length, 'results');
+      console.log('[Places] ✅ API returned', data.results.length, 'results');
       
       // Parse and transform results
-      const places: Place[] = data.results.map((place: any) => {
+      const places: Place[] = data.results.map((place: any, index: number) => {
         const placeLat = place.geometry.location.lat;
         const placeLng = place.geometry.location.lng;
         const distance = calculateDistance(midLat, midLng, placeLat, placeLng);
 
         return {
-          id: place.place_id || `place-${Date.now()}-${Math.random()}`,
+          id: place.place_id || `place-${Date.now()}-${index}`,
           name: place.name,
           address: place.vicinity || place.formatted_address || 'Address not available',
           latitude: placeLat,
@@ -250,27 +275,39 @@ export async function searchNearbyPlaces(
 
       // Return top 5 places
       const topPlaces = places.slice(0, 5);
-      console.log('[Places] Returning top', topPlaces.length, 'places');
+      console.log('[Places] ✅ Returning top', topPlaces.length, 'places');
       
       return topPlaces;
     } else if (data.status === 'ZERO_RESULTS') {
-      console.log('[Places] No places found in the area');
+      console.log('[Places] ⚠️ No places found in the area');
       return [];
     } else if (data.status === 'REQUEST_DENIED') {
-      console.error('[Places] API request denied. Status:', data.status, 'Error:', data.error_message || 'No error message');
+      console.error('[Places] ❌ REQUEST_DENIED');
+      console.error('[Places] Status:', data.status);
+      console.error('[Places] Error message:', data.error_message || 'No error message provided');
+      console.error('[Places] This usually means: API key invalid, billing not enabled, or API not enabled');
       throw new Error(`API request denied: ${data.error_message || 'Check your API key and billing'}`);
     } else if (data.status === 'INVALID_REQUEST') {
-      console.error('[Places] Invalid request. Status:', data.status, 'Error:', data.error_message || 'No error message');
+      console.error('[Places] ❌ INVALID_REQUEST');
+      console.error('[Places] Status:', data.status);
+      console.error('[Places] Error message:', data.error_message || 'No error message provided');
       console.error('[Places] Request params:', { location, radius, type, keyword });
+      console.error('[Places] This usually means: Missing required parameter or invalid parameter value');
       throw new Error(`Invalid request: ${data.error_message || 'Check request parameters'}`);
     } else {
-      console.error('[Places] API error. Status:', data.status, 'Error:', data.error_message || 'No error message');
+      console.error('[Places] ❌ API ERROR');
+      console.error('[Places] Status:', data.status);
+      console.error('[Places] Error message:', data.error_message || 'No error message provided');
+      console.error('[Places] Full response:', JSON.stringify(data, null, 2));
       throw new Error(`API error: ${data.status} - ${data.error_message || 'Unknown error'}`);
     }
   } catch (error: any) {
-    console.error('[Places] Error fetching places from Google Places API:', error);
+    console.error('[Places] ❌ EXCEPTION caught in searchNearbyPlaces');
+    console.error('[Places] Error type:', error.constructor.name);
+    console.error('[Places] Error message:', error.message);
+    console.error('[Places] Error stack:', error.stack);
     
-    // Re-throw with more context
+    // Re-throw with more context if it's an API error
     if (error.message && error.message.includes('API')) {
       throw error;
     }

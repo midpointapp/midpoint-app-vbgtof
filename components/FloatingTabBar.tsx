@@ -160,10 +160,12 @@ export default function FloatingTabBar({
           <View style={styles.tabsContainer}>
             {tabs.map((tab, index) => {
               const isActive = activeTabIndex === index;
+              // CRITICAL FIX: Use stable unique key combining route and name
+              const uniqueKey = `floatingtab-${tab.name}-${tab.route}`;
 
               return (
                 <TouchableOpacity
-                  key={`${tab.route}-${tab.name}`}
+                  key={uniqueKey}
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}

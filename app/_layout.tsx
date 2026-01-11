@@ -21,8 +21,9 @@ import { useThemeColors } from "@/styles/commonStyles";
 
 SplashScreen.preventAutoHideAsync();
 
+// CRITICAL FIX: Remove onboarding as initial route - let deep links work first
 export const unstable_settings = {
-  initialRouteName: "onboarding",
+  initialRouteName: "(tabs)",
 };
 
 function DeepLinkHandler({ children }: { children: React.ReactNode }) {
@@ -33,29 +34,37 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const processInitialUrl = async () => {
-      console.log('[DeepLink] Processing initial URL on cold start...');
+      console.log('[DeepLink] ========== PROCESSING INITIAL URL ==========');
+      console.log('[DeepLink] Platform:', Platform.OS);
+      console.log('[DeepLink] Timestamp:', new Date().toISOString());
       
-      // On web, check window.location first for immediate access
+      // CRITICAL FIX: On web, check window.location FIRST for immediate access
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('sessionId');
         const token = urlParams.get('token');
         const meetPointId = urlParams.get('meetPointId');
 
-        console.log('[DeepLink] initial URL:', window.location.href);
-        console.log('[DeepLink] sessionId:', sessionId, 'token:', token);
+        console.log('[DeepLink] Web URL:', window.location.href);
+        console.log('[DeepLink] Pathname:', window.location.pathname);
+        console.log('[DeepLink] Search params:', window.location.search);
+        console.log('[DeepLink] sessionId:', sessionId);
+        console.log('[DeepLink] token:', token);
         console.log('[DeepLink] meetPointId:', meetPointId);
 
+        // CRITICAL FIX: If sessionId present, route to /session immediately
         if (sessionId) {
-          console.log('[DeepLink] routing to Meet Session');
+          console.log('[DeepLink] ✅ Session ID found - routing to /session');
           setIsProcessingDeepLink(false);
           setDeepLinkProcessed(true);
           
           // Use setTimeout to ensure router is ready
           setTimeout(() => {
             if (token) {
+              console.log('[DeepLink] Navigating to /session with token');
               router.replace(`/session?sessionId=${sessionId}&token=${token}`);
             } else {
+              console.log('[DeepLink] Navigating to /session without token');
               router.replace(`/session?sessionId=${sessionId}`);
             }
           }, 100);
@@ -63,7 +72,7 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
         }
 
         if (meetPointId) {
-          console.log('[DeepLink] routing to Meet Now');
+          console.log('[DeepLink] ✅ Meet Point ID found - routing to /meet-now');
           setIsProcessingDeepLink(false);
           setDeepLinkProcessed(true);
           
@@ -72,6 +81,8 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
           }, 100);
           return;
         }
+
+        console.log('[DeepLink] No deep link params found on web');
       }
 
       // For native platforms, use Linking API
@@ -79,7 +90,7 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
         const initialUrl = await Linking.getInitialURL();
         
         if (initialUrl) {
-          console.log('[DeepLink] Initial URL found (native):', initialUrl);
+          console.log('[DeepLink] ✅ Initial URL found (native):', initialUrl);
           const parsed = Linking.parse(initialUrl);
           console.log('[DeepLink] Parsed URL:', JSON.stringify(parsed, null, 2));
           
@@ -87,8 +98,9 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
             const sessionId = parsed.queryParams.sessionId as string;
             const token = parsed.queryParams.token as string | undefined;
             
-            console.log('[DeepLink] sessionId:', sessionId, 'token:', token);
-            console.log('[DeepLink] routing to Meet Session');
+            console.log('[DeepLink] ✅ Session ID found:', sessionId);
+            console.log('[DeepLink] Token present:', !!token);
+            console.log('[DeepLink] Routing to /session');
             
             setIsProcessingDeepLink(false);
             setDeepLinkProcessed(true);
@@ -105,8 +117,8 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
           
           if (parsed.queryParams?.meetPointId) {
             const meetPointId = parsed.queryParams.meetPointId as string;
-            console.log('[DeepLink] meetPointId:', meetPointId);
-            console.log('[DeepLink] routing to Meet Now');
+            console.log('[DeepLink] ✅ Meet Point ID found:', meetPointId);
+            console.log('[DeepLink] Routing to /meet-now');
             
             setIsProcessingDeepLink(false);
             setDeepLinkProcessed(true);
@@ -116,13 +128,15 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
             }, 100);
             return;
           }
+        } else {
+          console.log('[DeepLink] No initial URL found (native)');
         }
       } catch (error) {
-        console.error('[DeepLink] Error processing initial URL:', error);
+        console.error('[DeepLink] ❌ Error processing initial URL:', error);
       }
 
-      // No deep link found, proceed normally
-      console.log('[DeepLink] No deep link parameters found, proceeding normally');
+      // CRITICAL FIX: No deep link found, proceed normally (no forced redirect to onboarding)
+      console.log('[DeepLink] No deep link parameters found, proceeding to default route');
       setIsProcessingDeepLink(false);
     };
 
@@ -132,11 +146,14 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
   // Listen for deep links when app is already open
   useEffect(() => {
     if (deepLinkProcessed) {
-      return; // Don't set up listener if we already processed a deep link
+      console.log('[DeepLink] Deep link already processed, skipping listener setup');
+      return;
     }
 
+    console.log('[DeepLink] Setting up deep link listener for app-already-open scenario');
+
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log('[DeepLink] Deep link event received (app already open)');
+      console.log('[DeepLink] ========== DEEP LINK EVENT (APP OPEN) ==========');
       if (event?.url) {
         console.log('[DeepLink] URL:', event.url);
         
@@ -148,8 +165,9 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
             const sessionId = parsed.queryParams.sessionId as string;
             const token = parsed.queryParams.token as string | undefined;
             
-            console.log('[DeepLink] sessionId:', sessionId, 'token:', token);
-            console.log('[DeepLink] routing to Meet Session');
+            console.log('[DeepLink] ✅ Session ID found:', sessionId);
+            console.log('[DeepLink] Token present:', !!token);
+            console.log('[DeepLink] Routing to /session');
             
             if (token) {
               router.push(`/session?sessionId=${sessionId}&token=${token}`);
@@ -161,23 +179,26 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
           
           if (parsed.queryParams?.meetPointId) {
             const meetPointId = parsed.queryParams.meetPointId as string;
-            console.log('[DeepLink] meetPointId:', meetPointId);
-            console.log('[DeepLink] routing to Meet Now');
+            console.log('[DeepLink] ✅ Meet Point ID found:', meetPointId);
+            console.log('[DeepLink] Routing to /meet-now');
             router.push(`/meet-now?meetPointId=${meetPointId}`);
             return;
           }
+
+          console.log('[DeepLink] No recognized params in URL');
         } catch (error) {
-          console.error('[DeepLink] Error parsing URL:', error);
+          console.error('[DeepLink] ❌ Error parsing URL:', error);
         }
       }
     });
 
     return () => {
+      console.log('[DeepLink] Cleaning up deep link listener');
       subscription?.remove();
     };
   }, [router, deepLinkProcessed]);
 
-  // Show loading screen while processing deep link
+  // IMPROVED LOADING STATE: Show loading screen while processing deep link
   if (isProcessingDeepLink) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
@@ -256,17 +277,18 @@ export default function RootLayout() {
           <GestureHandlerRootView>
             <DeepLinkHandler>
               <Stack>
-                <Stack.Screen 
-                  name="onboarding" 
-                  options={{ headerShown: false }} 
-                />
-                {/* Session screen MUST be registered before (tabs) for deep link priority */}
+                {/* CRITICAL FIX: Session screen MUST be registered FIRST for deep link priority */}
                 <Stack.Screen
                   name="session"
                   options={{
                     headerShown: true,
                     title: "Meet Session",
                   }}
+                />
+                {/* CRITICAL FIX: Onboarding is now optional - not forced on every load */}
+                <Stack.Screen 
+                  name="onboarding" 
+                  options={{ headerShown: false }} 
                 />
                 <Stack.Screen 
                   name="(tabs)" 
