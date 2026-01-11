@@ -24,9 +24,14 @@ export function generateShareUrl(meetPointId: string): string {
 }
 
 /**
- * Generate a session URL with sessionId and token (new flow)
- * FIXED: Changed from /? to /session? for proper routing
+ * Generate a session URL with sessionId and token
+ * 
+ * CRITICAL FIX: Changed to use root path (/) instead of /session
+ * This avoids server-level 404s even if SPA rewrites aren't configured
+ * The root index.tsx will read params and redirect to /session
  */
 export function generateSessionUrl(sessionId: string, token: string): string {
-  return `${WEB_BASE_URL}/session?sessionId=${sessionId}&token=${token}`;
+  const url = `${WEB_BASE_URL}/?sessionId=${sessionId}&token=${token}`;
+  console.log('[Config] ✅ Generated invite URL:', url);
+  return url;
 }

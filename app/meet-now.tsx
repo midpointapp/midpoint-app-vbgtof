@@ -67,6 +67,9 @@ export default function MeetNowScreen() {
       );
 
       console.log('[MeetNow] ✅ Session created:', sessionData.id);
+      console.log('[MeetNow] ✅ Navigating sender to /session (in-app)');
+      
+      // CRITICAL FIX: Keep existing sender in-app navigation to /session
       router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}`);
     } catch (error: any) {
       console.error('[MeetNow] Error:', error.message);

@@ -21,9 +21,9 @@ import { useThemeColors } from "@/styles/commonStyles";
 
 SplashScreen.preventAutoHideAsync();
 
-// CRITICAL FIX: Remove onboarding as initial route - let deep links work first
+// CRITICAL FIX: Set index as initial route for proper deep link handling
 export const unstable_settings = {
-  initialRouteName: "(tabs)",
+  initialRouteName: "index",
 };
 
 function DeepLinkHandler({ children }: { children: React.ReactNode }) {
@@ -52,22 +52,19 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
         console.log('[DeepLink] token:', token);
         console.log('[DeepLink] meetPointId:', meetPointId);
 
-        // CRITICAL FIX: If sessionId present, route to /session immediately
-        if (sessionId) {
-          console.log('[DeepLink] ✅ Session ID found - routing to /session');
+        // CRITICAL FIX: If on /session path, stay there (SPA rewrites working)
+        if (window.location.pathname === '/session' && sessionId) {
+          console.log('[DeepLink] ✅ Already on /session path with sessionId - staying here');
           setIsProcessingDeepLink(false);
           setDeepLinkProcessed(true);
-          
-          // Use setTimeout to ensure router is ready
-          setTimeout(() => {
-            if (token) {
-              console.log('[DeepLink] Navigating to /session with token');
-              router.replace(`/session?sessionId=${sessionId}&token=${token}`);
-            } else {
-              console.log('[DeepLink] Navigating to /session without token');
-              router.replace(`/session?sessionId=${sessionId}`);
-            }
-          }, 100);
+          return;
+        }
+
+        // CRITICAL FIX: If sessionId in root query params, let index.tsx handle redirect
+        if (sessionId && window.location.pathname === '/') {
+          console.log('[DeepLink] ✅ Session ID found at root - letting index.tsx handle redirect');
+          setIsProcessingDeepLink(false);
+          setDeepLinkProcessed(true);
           return;
         }
 
@@ -135,8 +132,8 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
         console.error('[DeepLink] ❌ Error processing initial URL:', error);
       }
 
-      // CRITICAL FIX: No deep link found, proceed normally (no forced redirect to onboarding)
-      console.log('[DeepLink] No deep link parameters found, proceeding to default route');
+      // CRITICAL FIX: No deep link found, proceed normally (let index.tsx handle routing)
+      console.log('[DeepLink] No deep link parameters found, proceeding to index route');
       setIsProcessingDeepLink(false);
     };
 
@@ -277,7 +274,14 @@ export default function RootLayout() {
           <GestureHandlerRootView>
             <DeepLinkHandler>
               <Stack>
-                {/* CRITICAL FIX: Session screen MUST be registered FIRST for deep link priority */}
+                {/* CRITICAL FIX: Index route for root path handling */}
+                <Stack.Screen
+                  name="index"
+                  options={{
+                    headerShown: false,
+                  }}
+                />
+                {/* CRITICAL FIX: Session screen for deep link routing */}
                 <Stack.Screen
                   name="session"
                   options={{
@@ -285,7 +289,6 @@ export default function RootLayout() {
                     title: "Meet Session",
                   }}
                 />
-                {/* CRITICAL FIX: Onboarding is now optional - not forced on every load */}
                 <Stack.Screen 
                   name="onboarding" 
                   options={{ headerShown: false }} 
