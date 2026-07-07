@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -73,25 +73,6 @@ export default function MidpointResultsScreen() {
     loadCurrentUserName();
   }, []);
 
-  useEffect(() => {
-    if (!meetPointId) {
-      Alert.alert('Error', 'No Meet Point ID provided', [
-        { text: 'OK', onPress: () => router.replace('/') },
-      ]);
-      return;
-    }
-
-    loadMeetPoint();
-    subscribeToMeetPoint();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [meetPointId]);
-
   const loadCurrentUserName = async () => {
     try {
       const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
@@ -104,7 +85,7 @@ export default function MidpointResultsScreen() {
     }
   };
 
-  const loadMeetPoint = async () => {
+  const loadMeetPoint = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -135,9 +116,9 @@ export default function MidpointResultsScreen() {
       console.error('Error loading MeetPoint:', error);
       setLoading(false);
     }
-  };
+  }, [meetPointId, router]);
 
-  const subscribeToMeetPoint = () => {
+  const subscribeToMeetPoint = useCallback(() => {
     // Check if already subscribed
     if (channelRef.current?.state === 'subscribed') {
       console.log('Already subscribed to MeetPoint channel');
@@ -174,7 +155,26 @@ export default function MidpointResultsScreen() {
       });
 
     channelRef.current = channel;
-  };
+  }, [meetPointId]);
+
+  useEffect(() => {
+    if (!meetPointId) {
+      Alert.alert('Error', 'No Meet Point ID provided', [
+        { text: 'OK', onPress: () => router.replace('/') },
+      ]);
+      return;
+    }
+
+    loadMeetPoint();
+    subscribeToMeetPoint();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [meetPointId, loadMeetPoint, subscribeToMeetPoint, router]);
 
   const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
     try {

@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme, Alert, Platform, View, ActivityIndicator, Text } from "react-native";
 import { useNetworkState } from "expo-network";
@@ -395,7 +394,6 @@ export default function RootLayout() {
                 />
               </Stack>
             </DeepLinkHandler>
-            <SystemBars style={"auto"} />
           </GestureHandlerRootView>
         </WidgetProvider>
       </ThemeProvider>

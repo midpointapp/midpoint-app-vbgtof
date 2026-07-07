@@ -50,6 +50,7 @@ export default function IndexScreen() {
     // No deep link params - redirect to home
     console.log('[Index] No deep link params - redirecting to home');
     router.replace('/(tabs)/(home)/');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token, meetPointId]);
 
   // Show loading state while redirecting

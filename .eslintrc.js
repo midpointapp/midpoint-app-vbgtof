@@ -45,6 +45,14 @@ module.exports = {
       rules: {
         '@typescript-eslint/no-var-requires': 'off'
       }
+    },
+    {
+      // react-leaflet and leaflet are web-only runtime deps not resolvable
+      // by the ESLint import resolver in a React Native / Expo project.
+      files: ['components/Map.web.tsx'],
+      rules: {
+        'import/no-unresolved': 'off'
+      }
     }
   ]
 };

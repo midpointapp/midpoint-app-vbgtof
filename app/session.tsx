@@ -71,7 +71,7 @@ export default function SessionScreen() {
   // CRITICAL FIX: Validate params on mount - DO NOT redirect before validation
   useEffect(() => {
     console.log('[Session] useEffect triggered - validating params...');
-    
+
     if (!sessionId) {
       console.error('[Session] ❌ VALIDATION FAILED - Missing sessionId in URL');
       console.error('[Session] Raw params:', JSON.stringify(params, null, 2));
@@ -83,6 +83,7 @@ export default function SessionScreen() {
     console.log('[Session] ✅ Validation passed - sessionId present:', sessionId);
     console.log('[Session] Fetch start - loading session...');
     loadSession(sessionId, token || null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token]);
 
   // Subscribe to realtime updates

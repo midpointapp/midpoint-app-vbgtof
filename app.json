@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "MidPoint Meet",
-    "slug": "MidPoint Meet",
+    "slug": "midpoint-meet",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
@@ -37,7 +37,7 @@
       "expo-router",
       "expo-web-browser"
     ],
-    "scheme": "natively",
+    "scheme": "midpointmeet",
     "experiments": {
       "typedRoutes": true
     },

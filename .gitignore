@@ -35,5 +35,12 @@ ios/
 netlify.toml
 .netlify/
 
-pnpm-lock.yaml
 package-lock.json
+
+.next/
+.turbo/
+.vercel/
+.cache/
+build/
+yarn.lock
+next-env.d.ts

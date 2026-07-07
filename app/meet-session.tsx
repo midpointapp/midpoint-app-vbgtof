@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -71,28 +71,7 @@ export default function MeetSessionScreen() {
   console.log('[MeetSession] URL params:', JSON.stringify(params, null, 2));
   console.log('[MeetSession] meetPointId from params:', meetPointId);
 
-  useEffect(() => {
-    if (!meetPointId) {
-      console.error('[MeetSession] ERROR: No meetPointId provided in URL params');
-      setError('invalid');
-      setLoading(false);
-      return;
-    }
-
-    console.log('[MeetSession] Valid meetPointId detected, loading MeetPoint...');
-    loadMeetPoint();
-    subscribeToMeetPoint();
-
-    return () => {
-      if (channelRef.current) {
-        console.log('[MeetSession] Cleaning up Supabase subscription');
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [meetPointId]);
-
-  const loadMeetPoint = async () => {
+  const loadMeetPoint = useCallback(async () => {
     try {
       console.log('[MeetSession] Fetching MeetPoint from Supabase with ID:', meetPointId);
       setLoading(true);
@@ -144,9 +123,9 @@ export default function MeetSessionScreen() {
       setError('error');
       setLoading(false);
     }
-  };
+  }, [meetPointId]);
 
-  const subscribeToMeetPoint = () => {
+  const subscribeToMeetPoint = useCallback(() => {
     if (channelRef.current?.state === 'subscribed') {
       console.log('[MeetSession] Already subscribed to MeetPoint updates');
       return;
@@ -185,7 +164,28 @@ export default function MeetSessionScreen() {
       });
 
     channelRef.current = channel;
-  };
+  }, [meetPointId]);
+
+  useEffect(() => {
+    if (!meetPointId) {
+      console.error('[MeetSession] ERROR: No meetPointId provided in URL params');
+      setError('invalid');
+      setLoading(false);
+      return;
+    }
+
+    console.log('[MeetSession] Valid meetPointId detected, loading MeetPoint...');
+    loadMeetPoint();
+    subscribeToMeetPoint();
+
+    return () => {
+      if (channelRef.current) {
+        console.log('[MeetSession] Cleaning up Supabase subscription');
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [meetPointId, loadMeetPoint, subscribeToMeetPoint]);
 
   const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
     try {
