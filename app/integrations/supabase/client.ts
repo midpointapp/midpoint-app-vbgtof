@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // Metro inlines EXPO_PUBLIC_* from .env at build time.
 // Hardcoded fallbacks ensure preview/Expo Go never gets undefined.
-const FALLBACK_URL = 'https://yryjvcilhnnchaieieby.supabase.co';
-const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyeWp2Y2lsaG5uY2hhaWVpZWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNDE1MTEsImV4cCI6MjA4MDgxNzUxMX0.c8JGh84L3nsg-tqJndoQcY8GN3qGgzXyoE711t_nLj8';
+const FALLBACK_URL = 'https://kjlbcgjvruyrqvkdtljz.supabase.co';
+const FALLBACK_KEY = 'sb_publishable_gYoM_nIHjWmI_KAMf0NHXQ_xVBsYd1O';
 
 const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL ?? FALLBACK_URL;
 const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FALLBACK_KEY;
@@ -34,7 +34,7 @@ async function testSupabaseConnection(): Promise<void> {
       console.warn('[Supabase] ⚠️ Connection test failed — status:', status, '| message:', msg);
 
       if (msg.includes('project is suspended') || msg.includes('project is paused') || status === 503) {
-        console.error('[Supabase] 🔴 PROJECT IS PAUSED — go to https://supabase.com/dashboard/project/yryjvcilhnnchaieieby and click Restore');
+        console.error('[Supabase] 🔴 PROJECT IS PAUSED — go to https://supabase.com/dashboard/project/kjlbcgjvruyrqvkdtljz and click Restore');
       } else if (status === 401 || msg.includes('JWT')) {
         console.error('[Supabase] 🔴 AUTH ERROR — anon key may be wrong or expired');
       } else if (msg.includes('does not exist') || msg.includes('relation')) {
@@ -51,7 +51,7 @@ async function testSupabaseConnection(): Promise<void> {
     console.warn('[Supabase] ⚠️ Connection test threw:', msg);
     if (msg.includes('Network request failed')) {
       console.error('[Supabase] 🔴 NETWORK FAILURE — most likely cause: Supabase project is PAUSED.');
-      console.error('[Supabase] 👉 Restore at: https://supabase.com/dashboard/project/yryjvcilhnnchaieieby');
+      console.error('[Supabase] 👉 Restore at: https://supabase.com/dashboard/project/kjlbcgjvruyrqvkdtljz');
     }
     // Never rethrow — connection test failure must not crash the app
   }
