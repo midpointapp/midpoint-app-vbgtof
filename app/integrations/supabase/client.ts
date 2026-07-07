@@ -30,17 +30,30 @@ async function testSupabaseConnection(): Promise<void> {
       .limit(1);
 
     if (error) {
-      console.warn('[Supabase] Connection test failed — status:', status, '| message:', error.message);
-      if (error.message.includes('project is suspended') || error.message.includes('project is paused')) {
-        console.warn('[Supabase] Project appears paused — check https://supabase.com/dashboard');
+      const msg = error.message ?? '';
+      console.warn('[Supabase] ⚠️ Connection test failed — status:', status, '| message:', msg);
+
+      if (msg.includes('project is suspended') || msg.includes('project is paused') || status === 503) {
+        console.error('[Supabase] 🔴 PROJECT IS PAUSED — go to https://supabase.com/dashboard/project/yryjvcilhnnchaieieby and click Restore');
+      } else if (status === 401 || msg.includes('JWT')) {
+        console.error('[Supabase] 🔴 AUTH ERROR — anon key may be wrong or expired');
+      } else if (msg.includes('does not exist') || msg.includes('relation')) {
+        console.error('[Supabase] 🔴 TABLE MISSING — meet_sessions table does not exist. Run migrations.');
+      } else if (msg.includes('Network request failed') || msg.includes('fetch')) {
+        console.error('[Supabase] 🔴 NETWORK ERROR — Supabase project may be paused or URL is wrong');
+        console.error('[Supabase] URL being used:', supabaseUrl.slice(0, 40));
       }
     } else {
       console.log('[Supabase] ✅ Connection test passed — status:', status);
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.warn('[Supabase] Connection test threw (network or config issue):', msg);
-    // Do NOT rethrow — a failed connection test must never crash the app
+    console.warn('[Supabase] ⚠️ Connection test threw:', msg);
+    if (msg.includes('Network request failed')) {
+      console.error('[Supabase] 🔴 NETWORK FAILURE — most likely cause: Supabase project is PAUSED.');
+      console.error('[Supabase] 👉 Restore at: https://supabase.com/dashboard/project/yryjvcilhnnchaieieby');
+    }
+    // Never rethrow — connection test failure must not crash the app
   }
 }
 

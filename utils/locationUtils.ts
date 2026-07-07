@@ -1,4 +1,5 @@
 
+import { Platform } from 'react-native';
 import { SessionParticipant } from '@/types';
 import { GOOGLE_PLACES_API_KEY, DEFAULT_SEARCH_RADIUS } from '@/constants/config';
 
@@ -229,16 +230,41 @@ export async function searchNearbyPlaces(
   console.log('[Places] Request URL (key redacted):', url.replace(GOOGLE_PLACES_API_KEY, 'REDACTED'));
 
   try {
-    console.log('[Places] Sending request to Google Places API...');
-    const response = await fetch(url);
-    
-    console.log('[Places] Response status:', response.status);
-    console.log('[Places] Response ok:', response.ok);
-    
-    const data = await response.json();
+    let data: any;
+
+    if (Platform.OS === 'web') {
+      // Web: proxy through Supabase Edge Function to avoid CORS
+      const SUPABASE_URL = 'https://yryjvcilhnnchaieieby.supabase.co';
+      const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyeWp2Y2lsaG5uY2hhaWVpZWJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNDE1MTEsImV4cCI6MjA4MDgxNzUxMX0.c8JGh84L3nsg-tqJndoQcY8GN3qGgzXyoE711t_nLj8';
+
+      console.log('[Places] Web platform — routing through Edge Function proxy');
+      const proxyResponse = await fetch(`${SUPABASE_URL}/functions/v1/places-proxy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ANON_KEY}`,
+          'apikey': ANON_KEY,
+        },
+        body: JSON.stringify({ lat: midLat, lng: midLng, type, keyword, radius }),
+      });
+
+      if (!proxyResponse.ok) {
+        const errText = await proxyResponse.text();
+        console.error('[Places] ❌ Edge Function error:', proxyResponse.status, errText);
+        throw new Error(`Places proxy error ${proxyResponse.status}: ${errText}`);
+      }
+      data = await proxyResponse.json();
+    } else {
+      // Native: call Google Places API directly (no CORS restriction)
+      console.log('[Places] Native platform — calling Google Places API directly');
+      const response = await fetch(url);
+      console.log('[Places] Response status:', response.status);
+      data = await response.json();
+    }
 
     console.log('[Places] API response status:', data.status);
-    
+
     // CRITICAL FIX: Enhanced error logging with full details
     if (data.error_message) {
       console.error('[Places] ❌ API error_message:', data.error_message);
