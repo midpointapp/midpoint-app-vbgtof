@@ -124,22 +124,29 @@ export function calculateDistance(
  * Map meetup type to Google Places API parameters
  */
 export function getGooglePlacesType(meetupType: string): { type?: string; keyword?: string } {
+  console.log('[getGooglePlacesType] meetupType:', meetupType);
   switch (meetupType) {
-    case 'police':
-      return { type: 'police' };
+    case 'coffee':
+      return { type: 'cafe' };
+    case 'food':
+      return { type: 'restaurant' };
+    case 'marketplace':
+      return { type: 'shopping_mall' };
     case 'gas':
       return { type: 'gas_station' };
+    case 'park':
+      return { type: 'park' };
+    case 'police':
+      return { type: 'police' };
+    // legacy keys kept for backwards compatibility
     case 'restaurant':
       return { type: 'restaurant' };
     case 'cafe':
       return { type: 'cafe' };
     case 'shopping_mall':
       return { type: 'shopping_mall' };
-    case 'park':
-      return { type: 'park' };
-    case 'point_of_interest':
-      return { type: 'point_of_interest' };
-    // Legacy support
+    case 'gas_station':
+      return { type: 'gas_station' };
     case 'rest':
       return { keyword: 'rest area' };
     case 'public':

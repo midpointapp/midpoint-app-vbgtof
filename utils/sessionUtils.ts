@@ -46,7 +46,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     console.log('[SessionUtils] ✅ Session created successfully');
     console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
-    const message = `Join me on MidPoint Meet!\n\nYour join code is: ${joinCode}\n\nOpen the app and tap 'Join a Meet' to enter the code.`;
+    const message = `Join me on MidPoint Meet!\n\nYour join code is: ${joinCode}\n\nOpen the app: https://web-midpoint-app-vbgtof.natively.dev\nThen tap 'Join a Meet' and enter the code.`;
 
     if (Platform.OS === 'web') {
       console.log('[SessionUtils] Web: copying join code to clipboard');
