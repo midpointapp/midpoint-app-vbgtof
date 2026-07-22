@@ -19,10 +19,6 @@ import { WidgetProvider } from "@/contexts/WidgetContext";
 
 SplashScreen.preventAutoHideAsync();
 
-// CRITICAL FIX: Set index as initial route for proper deep link handling
-export const unstable_settings = {
-  initialRouteName: "index",
-};
 
 function DeepLinkHandler({ children }: { children: React.ReactNode }) {
   const router = useRouter();

@@ -4,7 +4,6 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { useRouter } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
-import { EnvDebugBanner } from '@/components/EnvDebugBanner';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -20,7 +19,6 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <EnvDebugBanner />
       <LinearGradient
         colors={[colors.primary + '20', colors.background]}
         style={styles.gradientBackground}
