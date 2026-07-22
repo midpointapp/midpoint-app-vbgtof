@@ -68,6 +68,7 @@ export default function SessionScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
+  const [lastDbUpdate, setLastDbUpdate] = useState<string | null>(null);
   const placesGeneratedRef = useRef(false);
 
   // CRITICAL FIX: Validate params on mount - DO NOT redirect before validation
@@ -109,6 +110,7 @@ export default function SessionScreen() {
           if (payload.new) {
             const updatedSession = payload.new as MeetSession;
             setSession(updatedSession);
+            setLastDbUpdate(new Date().toLocaleTimeString());
 
             // If receiver just joined (receiver_lat now set) and no places yet, generate them
             if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current) {
@@ -184,6 +186,7 @@ export default function SessionScreen() {
       }
 
       setSession(data);
+      setLastDbUpdate(new Date().toLocaleTimeString());
 
       // Role: trust the URL param if present; otherwise infer from receiver_lat
       const senderRole = isSenderParam === 'true';
@@ -483,6 +486,13 @@ export default function SessionScreen() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
+        <DebugPanel
+          sessionId={sessionId}
+          urlSessionId={sessionId}
+          isSender={isSender}
+          session={session}
+          lastUpdate={lastDbUpdate}
+        />
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>
@@ -594,6 +604,95 @@ export default function SessionScreen() {
     </ScrollView>
   );
 }
+
+function DebugPanel({
+  sessionId,
+  urlSessionId,
+  isSender,
+  session,
+  lastUpdate,
+}: {
+  sessionId: string | undefined;
+  urlSessionId: string | undefined;
+  isSender: boolean;
+  session: MeetSession | null;
+  lastUpdate: string | null;
+}) {
+  const row = (label: string, value: string, valueColor?: string) => (
+    <View style={debugStyles.row} key={label}>
+      <Text style={debugStyles.label}>{label}</Text>
+      <Text style={[debugStyles.value, valueColor ? { color: valueColor } : {}]}>{value}</Text>
+    </View>
+  );
+
+  const fmtCoord = (v: number | null | undefined) =>
+    v != null ? v.toFixed(5) : '—';
+
+  const senderIdDisplay = sessionId ? sessionId.substring(0, 8) + '…' : '—';
+  const urlIdDisplay = urlSessionId ? urlSessionId.substring(0, 8) + '…' : '—';
+  const dbIdDisplay = session?.id ? session.id.substring(0, 8) + '…' : '—';
+  const roleLabel = isSender ? 'SENDER' : 'RECEIVER';
+  const roleColor = isSender ? '#4CAF50' : '#2196F3';
+  const senderCoords = session ? `${fmtCoord(session.sender_lat)}, ${fmtCoord(session.sender_lng)}` : '—';
+  const receiverCoords = session ? `${fmtCoord(session.receiver_lat)}, ${fmtCoord(session.receiver_lng)}` : '—';
+  const receiverJoined = session?.receiver_lat != null ? 'YES ✅' : 'NO ⏳';
+  const receiverJoinedColor = session?.receiver_lat != null ? '#4CAF50' : '#FF9800';
+  const statusDisplay = session?.status?.replace(/_/g, ' ').toUpperCase() ?? '—';
+
+  return (
+    <View style={debugStyles.panel}>
+      <Text style={debugStyles.heading}>🛠 Debug Panel</Text>
+      {row('SESSION ID:', senderIdDisplay)}
+      {row('ROLE:', roleLabel, roleColor)}
+      {row('URL SESSION ID:', urlIdDisplay)}
+      {row('DATABASE SESSION ID:', dbIdDisplay)}
+      {row('SENDER LOCATION:', senderCoords)}
+      {row('RECEIVER LOCATION:', receiverCoords)}
+      {row('RECEIVER JOINED:', receiverJoined, receiverJoinedColor)}
+      {row('STATUS:', statusDisplay)}
+      {row('LAST DB UPDATE:', lastUpdate ?? '—')}
+    </View>
+  );
+}
+
+const debugStyles = StyleSheet.create({
+  panel: {
+    margin: 12,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e94560',
+  },
+  heading: {
+    color: '#e94560',
+    fontWeight: '700',
+    fontSize: 13,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#333',
+  },
+  label: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  value: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    flex: 1,
+    textAlign: 'right',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
