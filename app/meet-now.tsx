@@ -45,9 +45,8 @@ export default function MeetNowScreen() {
 
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
-      console.log('[MeetNow] Location:', loc.coords);
+      console.log('[MeetNow] Location acquired');
     } catch (error: any) {
-      console.error('[MeetNow] Location error:', error.message);
       Alert.alert('Location Error', 'Unable to get your location.');
     }
   }
@@ -58,6 +57,7 @@ export default function MeetNowScreen() {
       return;
     }
 
+    console.log('[MeetNow] Creating session, type:', selectedType);
     setCreatingSession(true);
     try {
       const sessionData = await createSessionAndSendInvite(
@@ -66,23 +66,34 @@ export default function MeetNowScreen() {
         location.coords.longitude
       );
 
-      console.log('[MeetNow] ✅ Session created:', sessionData.id);
-      console.log('[MeetNow] ✅ Navigating sender to /session (in-app)');
-      
-      // CRITICAL FIX: Keep existing sender in-app navigation to /session
+      console.log('[MeetNow] Session created, navigating to session screen');
       router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}&isSender=true`);
     } catch (error: any) {
-      console.error('[MeetNow] Error:', error.message);
       Alert.alert('Session Error', error?.message ?? 'Unable to create session');
     } finally {
       setCreatingSession(false);
     }
   }
 
+  const locationReady = location !== null;
+  const buttonLabel = creatingSession
+    ? 'Creating...'
+    : !locationReady
+    ? 'Getting location...'
+    : 'Create & Send Invite';
+  const locationStatusText = locationReady ? '📍 Location ready' : '📍 Getting your location...';
+  const locationStatusColor = locationReady ? '#4CAF50' : colors.textSecondary;
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => {
+            console.log('[MeetNow] Back button pressed');
+            router.back();
+          }}
+          style={styles.backButton}
+        >
           <MaterialIcons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text }]}>Meet Now</Text>
@@ -99,7 +110,10 @@ export default function MeetNowScreen() {
               { backgroundColor: colors.card },
               selectedType === type.id && styles.typeCardSelected,
             ]}
-            onPress={() => setSelectedType(type.id)}
+            onPress={() => {
+              console.log('[MeetNow] Selected type:', type.id);
+              setSelectedType(type.id);
+            }}
           >
             <MaterialIcons
               name={type.icon as any}
@@ -111,15 +125,19 @@ export default function MeetNowScreen() {
         ))}
       </View>
 
+      <Text style={[styles.locationStatus, { color: locationStatusColor }]}>
+        {locationStatusText}
+      </Text>
+
       <TouchableOpacity
-        style={[styles.createButton, creatingSession && styles.createButtonDisabled]}
+        style={[styles.createButton, (creatingSession || !locationReady) && styles.createButtonDisabled]}
         onPress={handleCreateSession}
-        disabled={creatingSession || !location}
+        disabled={creatingSession || !locationReady}
       >
         {creatingSession ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.createButtonText}>Create & Send Invite</Text>
+          <Text style={styles.createButtonText}>{buttonLabel}</Text>
         )}
       </TouchableOpacity>
     </ScrollView>
@@ -132,10 +150,11 @@ const styles = StyleSheet.create({
   backButton: { marginRight: 15 },
   title: { fontSize: 24, fontWeight: 'bold' },
   sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
-  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 30 },
-  typeCard: { width: '30%', padding: 15, borderRadius: 12, alignItems: 'center' },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
+  typeCard: { width: '30%', padding: 18, borderRadius: 12, alignItems: 'center' },
   typeCardSelected: { borderWidth: 2, borderColor: '#007AFF' },
-  typeLabel: { fontSize: 12, marginTop: 8, textAlign: 'center' },
+  typeLabel: { fontSize: 13, marginTop: 8, textAlign: 'center' },
+  locationStatus: { fontSize: 13, marginBottom: 20, textAlign: 'center' },
   createButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 12, alignItems: 'center' },
   createButtonDisabled: { opacity: 0.5 },
   createButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
