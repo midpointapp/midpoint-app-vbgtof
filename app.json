@@ -16,7 +16,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "MidPoint Meet needs photo library access to let you set a profile picture.",
+        "NSLocationWhenInUseUsageDescription": "MidPoint Meet needs your location to calculate the midpoint between you and the other person."
       }
     },
     "android": {
@@ -25,7 +27,8 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively"
+      "package": "com.anonymous.Natively",
+      "permissions": ["READ_MEDIA_IMAGES", "ACCESS_FINE_LOCATION"]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
