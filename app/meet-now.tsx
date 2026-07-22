@@ -70,7 +70,7 @@ export default function MeetNowScreen() {
       console.log('[MeetNow] ✅ Navigating sender to /session (in-app)');
       
       // CRITICAL FIX: Keep existing sender in-app navigation to /session
-      router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}`);
+      router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}&isSender=true`);
     } catch (error: any) {
       console.error('[MeetNow] Error:', error.message);
       Alert.alert('Session Error', error?.message ?? 'Unable to create session');

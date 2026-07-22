@@ -56,6 +56,7 @@ export default function SessionScreen() {
   // CRITICAL FIX: Parse params - handle both string and array cases
   const sessionId = Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId;
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
+  const isSenderParam = Array.isArray(params.isSender) ? params.isSender[0] : params.isSender;
 
   console.log('[Session] ========== SESSION SCREEN MOUNTED ==========');
   console.log('[Session] URL params read:', { sessionId, token, rawParams: params });
@@ -67,6 +68,7 @@ export default function SessionScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
+  const placesGeneratedRef = useRef(false);
 
   // CRITICAL FIX: Validate params on mount - DO NOT redirect before validation
   useEffect(() => {
@@ -105,7 +107,14 @@ export default function SessionScreen() {
         (payload) => {
           console.log('[Session] Realtime update received:', payload);
           if (payload.new) {
-            setSession(payload.new as MeetSession);
+            const updatedSession = payload.new as MeetSession;
+            setSession(updatedSession);
+
+            // If receiver just joined (receiver_lat now set) and no places yet, generate them
+            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current) {
+              console.log('[Session] Receiver joined via realtime — generating places now');
+              generatePlaces(sessionId!, updatedSession);
+            }
           }
         }
       )
@@ -130,7 +139,7 @@ export default function SessionScreen() {
       console.log('[Session] Cleaning up realtime subscription');
       channel.unsubscribe();
     };
-  }, [sessionId, session]);
+  }, [sessionId]);
 
   const loadSession = async (id: string, accessToken: string | null) => {
     try {
@@ -176,24 +185,22 @@ export default function SessionScreen() {
 
       setSession(data);
 
-      // Determine if current user is sender or receiver
-      // For now, assume if receiver_lat is null, we're the receiver
-      const isReceiver = !data.receiver_lat;
-      setIsSender(!isReceiver);
-
-      console.log('[Session] User role determined:', isReceiver ? 'receiver' : 'sender');
+      // Role: trust the URL param if present; otherwise infer from receiver_lat
+      const senderRole = isSenderParam === 'true';
+      setIsSender(senderRole);
+      console.log('[Session] User role determined:', senderRole ? 'sender' : 'receiver');
 
       // Load places if they exist
       await loadSessionPlaces(id);
 
-      // If receiver and no location captured yet, capture it
-      if (isReceiver && !data.receiver_lat) {
+      // Only capture location if we are the receiver AND receiver_lat is not yet set
+      if (!senderRole && !data.receiver_lat) {
         console.log('[Session] Receiver needs to capture location...');
         await captureReceiverLocation(id, data);
       }
 
-      // If both locations present and no places yet, generate them
-      if (data.sender_lat && data.receiver_lat && places.length === 0) {
+      // Generate places only if both locations exist
+      if (data.sender_lat && data.receiver_lat) {
         console.log('[Session] Both locations present, generating places...');
         await generatePlaces(id, data);
       }
@@ -308,6 +315,7 @@ export default function SessionScreen() {
     }
 
     try {
+      placesGeneratedRef.current = true;
       console.log('[Session] Generating places with coordinates:', {
         senderLat: sessionData.sender_lat,
         senderLng: sessionData.sender_lng,

@@ -37,48 +37,11 @@ function DeepLinkHandler({ children }: { children: React.ReactNode }) {
       console.log('[DeepLink] Platform:', Platform.OS);
       console.log('[DeepLink] Timestamp:', new Date().toISOString());
       
-      // CRITICAL FIX: On web, check window.location FIRST for immediate access
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('sessionId');
-        const token = urlParams.get('token');
-        const meetPointId = urlParams.get('meetPointId');
-
-        console.log('[DeepLink] Web URL:', window.location.href);
-        console.log('[DeepLink] Pathname:', window.location.pathname);
-        console.log('[DeepLink] Search params:', window.location.search);
-        console.log('[DeepLink] sessionId:', sessionId);
-        console.log('[DeepLink] token:', token);
-        console.log('[DeepLink] meetPointId:', meetPointId);
-
-        // CRITICAL FIX: If on /session path, stay there (SPA rewrites working)
-        if (window.location.pathname === '/session' && sessionId) {
-          console.log('[DeepLink] ✅ Already on /session path with sessionId - staying here');
-          setIsProcessingDeepLink(false);
-          setDeepLinkProcessed(true);
-          return;
-        }
-
-        // CRITICAL FIX: If sessionId in root query params, let index.tsx handle redirect
-        if (sessionId && window.location.pathname === '/') {
-          console.log('[DeepLink] ✅ Session ID found at root - letting index.tsx handle redirect');
-          setIsProcessingDeepLink(false);
-          setDeepLinkProcessed(true);
-          return;
-        }
-
-        if (meetPointId) {
-          console.log('[DeepLink] ✅ Meet Point ID found - routing to /meet-now');
-          setIsProcessingDeepLink(false);
-          setDeepLinkProcessed(true);
-          
-          setTimeout(() => {
-            router.replace(`/meet-now?meetPointId=${meetPointId}`);
-          }, 100);
-          return;
-        }
-
-        console.log('[DeepLink] No deep link params found on web');
+      // On web, index.tsx reads window.location params directly via useLocalSearchParams.
+      // No interception needed here — just unblock rendering immediately.
+      if (Platform.OS === 'web') {
+        setIsProcessingDeepLink(false);
+        return;
       }
 
       // For native platforms, use Linking API
