@@ -41,6 +41,7 @@ interface MeetSession {
   receiver_lng: number | null;
   status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired';
   invite_token: string;
+  join_code?: string;
   expires_at: string;
   proposed_place_id: string | null;
   confirmed_place_id: string | null;
@@ -89,9 +90,9 @@ export default function SessionScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates — start as soon as sessionId is known
   useEffect(() => {
-    if (!sessionId || !session) return;
+    if (!sessionId) return;
 
     console.log('[Session] Setting up realtime subscription for session:', sessionId);
 
@@ -513,6 +514,15 @@ export default function SessionScreen() {
           </View>
         )}
 
+        {/* Join code card — shown to sender while waiting */}
+        {isSender && session.join_code && session.status === 'waiting_for_receiver' && (
+          <View style={styles.joinCodeCard}>
+            <Text style={styles.joinCodeLabel}>Share this code:</Text>
+            <Text style={styles.joinCodeText}>{session.join_code}</Text>
+            <Text style={styles.joinCodeHint}>Receiver enters this in the app</Text>
+          </View>
+        )}
+
         {/* Places list */}
         {places.length > 0 && session.status !== 'confirmed' && (
           <View style={styles.section}>
@@ -803,6 +813,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  joinCodeCard: {
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 16,
+    backgroundColor: '#1a1a2e',
+    marginVertical: 16,
+  },
+  joinCodeLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  joinCodeText: {
+    color: '#fff',
+    fontSize: 48,
+    fontWeight: '800',
+    letterSpacing: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  joinCodeHint: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 8,
   },
   loadingText: {
     marginTop: 12,

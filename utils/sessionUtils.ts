@@ -1,24 +1,20 @@
 
 import { Alert, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { generateId } from './idGenerator';
+import { generateId, generateJoinCode } from './idGenerator';
 import { supabase } from '../app/integrations/supabase/client';
 import { searchNearbyPlaces, Place } from './locationUtils';
-import { generateSessionUrl } from '../constants/config';
 
 export async function createSessionAndSendInvite(category: string, senderLat: number, senderLng: number) {
   const sessionId = generateId();
   const inviteToken = generateId();
+  const joinCode = generateJoinCode();
   const expiresAt = new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).toISOString();
 
-  // CRITICAL FIX: Use root path with query params to avoid server 404s
-  // The root index.tsx will read params and redirect to /session
-  const inviteUrl = generateSessionUrl(sessionId, inviteToken);
-  
   console.log('[SessionUtils] ========== CREATING SESSION ==========');
   console.log('[SessionUtils] Session ID:', sessionId);
   console.log('[SessionUtils] Invite token:', inviteToken);
-  console.log('[SessionUtils] ✅ Final invite URL:', inviteUrl);
+  console.log('[SessionUtils] Join code:', joinCode);
   console.log('[SessionUtils] Category:', category);
   console.log('[SessionUtils] Sender location:', { lat: senderLat, lng: senderLng });
 
@@ -31,6 +27,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
         sender_lat: senderLat,
         sender_lng: senderLng,
         invite_token: inviteToken,
+        join_code: joinCode,
         expires_at: expiresAt,
         status: 'waiting_for_receiver',
       }])
@@ -47,16 +44,20 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     }
 
     console.log('[SessionUtils] ✅ Session created successfully');
-    console.log('[SessionUtils] ✅ Invite URL to share:', inviteUrl);
+    console.log('[SessionUtils] ✅ Join code to share:', joinCode);
+
+    const message = `Join me on MidPoint Meet!\n\nYour join code is: ${joinCode}\n\nOpen the app and tap 'Join a Meet' to enter the code.`;
 
     if (Platform.OS === 'web') {
-      await Clipboard.setStringAsync(inviteUrl);
-      Alert.alert('Invite Link Copied', `Share this link:\n\n${inviteUrl}`);
+      console.log('[SessionUtils] Web: copying join code to clipboard');
+      await Clipboard.setStringAsync(message);
+      Alert.alert('Code Copied!', message);
     } else {
-      await Share.share({ message: `Join me at our midpoint! ${inviteUrl}` });
+      console.log('[SessionUtils] Native: sharing join code via Share sheet');
+      await Share.share({ message });
     }
 
-    return sessionData;
+    return { ...sessionData, join_code: joinCode };
 
   } catch (error: any) {
     console.error('[SessionUtils] ❌ Error creating session:', error.message);

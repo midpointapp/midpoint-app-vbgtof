@@ -1,13 +1,12 @@
 
 import "react-native-reanimated";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useFonts } from "expo-font";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useColorScheme, Alert, Platform } from "react-native";
+import { useColorScheme, Alert } from "react-native";
 import { useNetworkState } from "expo-network";
-import * as Linking from "expo-linking";
 import {
   DarkTheme,
   DefaultTheme,
@@ -18,108 +17,6 @@ import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 
 SplashScreen.preventAutoHideAsync();
-
-
-function DeepLinkHandler({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
-
-  // On native: handle deep links that cold-start the app
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-
-    const processInitialUrl = async () => {
-      console.log('[DeepLink] Processing initial URL (native)');
-      try {
-        const initialUrl = await Linking.getInitialURL();
-
-        if (initialUrl) {
-          console.log('[DeepLink] Initial URL:', initialUrl);
-          const parsed = Linking.parse(initialUrl);
-          console.log('[DeepLink] Parsed:', JSON.stringify(parsed));
-
-          if (parsed.queryParams?.sessionId) {
-            const sessionId = parsed.queryParams.sessionId as string;
-            const token = parsed.queryParams.token as string | undefined;
-            console.log('[DeepLink] sessionId found, routing to /session');
-            setDeepLinkProcessed(true);
-            setTimeout(() => {
-              if (token) {
-                router.replace(`/session?sessionId=${sessionId}&token=${token}`);
-              } else {
-                router.replace(`/session?sessionId=${sessionId}`);
-              }
-            }, 100);
-            return;
-          }
-
-          if (parsed.queryParams?.meetPointId) {
-            const meetPointId = parsed.queryParams.meetPointId as string;
-            console.log('[DeepLink] meetPointId found, routing to /meet-now');
-            setDeepLinkProcessed(true);
-            setTimeout(() => {
-              router.replace(`/meet-now?meetPointId=${meetPointId}`);
-            }, 100);
-            return;
-          }
-        } else {
-          console.log('[DeepLink] No initial URL (native)');
-        }
-      } catch (error) {
-        console.error('[DeepLink] Error processing initial URL:', error);
-      }
-    };
-
-    processInitialUrl();
-  }, [router]);
-
-  // Listen for deep links when app is already open
-  useEffect(() => {
-    if (deepLinkProcessed) return;
-
-    console.log('[DeepLink] Setting up deep link listener');
-
-    const subscription = Linking.addEventListener("url", (event) => {
-      console.log('[DeepLink] URL event (app open):', event?.url);
-      if (event?.url) {
-        try {
-          const parsed = Linking.parse(event.url);
-          console.log('[DeepLink] Parsed:', JSON.stringify(parsed));
-
-          if (parsed.queryParams?.sessionId) {
-            const sessionId = parsed.queryParams.sessionId as string;
-            const token = parsed.queryParams.token as string | undefined;
-            console.log('[DeepLink] sessionId found, pushing /session');
-            if (token) {
-              router.push(`/session?sessionId=${sessionId}&token=${token}`);
-            } else {
-              router.push(`/session?sessionId=${sessionId}`);
-            }
-            return;
-          }
-
-          if (parsed.queryParams?.meetPointId) {
-            const meetPointId = parsed.queryParams.meetPointId as string;
-            console.log('[DeepLink] meetPointId found, pushing /meet-now');
-            router.push(`/meet-now?meetPointId=${meetPointId}`);
-            return;
-          }
-
-          console.log('[DeepLink] No recognized params in URL');
-        } catch (error) {
-          console.error('[DeepLink] Error parsing URL:', error);
-        }
-      }
-    });
-
-    return () => {
-      console.log('[DeepLink] Cleaning up deep link listener');
-      subscription?.remove();
-    };
-  }, [router, deepLinkProcessed]);
-
-  return <>{children}</>;
-}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -183,8 +80,7 @@ export default function RootLayout() {
       >
         <WidgetProvider>
           <GestureHandlerRootView>
-            <DeepLinkHandler>
-              <Stack>
+            <Stack>
                 {/* CRITICAL FIX: Index route for root path handling */}
                 <Stack.Screen
                   name="index"
@@ -305,7 +201,6 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
-            </DeepLinkHandler>
           </GestureHandlerRootView>
         </WidgetProvider>
       </ThemeProvider>
