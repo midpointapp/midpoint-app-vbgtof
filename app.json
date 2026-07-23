@@ -28,7 +28,10 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.Natively",
-      "permissions": ["READ_MEDIA_IMAGES", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
