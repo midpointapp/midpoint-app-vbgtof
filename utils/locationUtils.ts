@@ -121,6 +121,20 @@ export function calculateDistance(
 }
 
 /**
+ * Calculate a dynamic search radius based on distance between two points.
+ * Uses 15% of the total distance, clamped between 5km and 50km.
+ * @returns Radius in meters
+ */
+export function calculateDynamicRadius(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const distanceKm = calculateDistance(lat1, lng1, lat2, lng2);
+  const radiusKm = Math.min(Math.max(distanceKm * 0.15, 5), 50);
+  return Math.round(radiusKm * 1000); // convert to meters
+}
+
+/**
  * Map meetup type to Google Places API parameters
  */
 export function getGooglePlacesType(meetupType: string): { type?: string; keyword?: string } {
@@ -167,7 +181,8 @@ export function getGooglePlacesType(meetupType: string): { type?: string; keywor
 export async function searchNearbyPlaces(
   midLat: number,
   midLng: number,
-  meetupType: string
+  meetupType: string,
+  radiusMeters?: number
 ): Promise<Place[]> {
   console.log('[Places] ========== SEARCH NEARBY PLACES ==========');
   console.log('[Places] Input params:', { midLat, midLng, meetupType });
@@ -218,7 +233,7 @@ export async function searchNearbyPlaces(
 
   const { type, keyword } = getGooglePlacesType(meetupType);
   const location = `${midLat},${midLng}`;
-  const radius = DEFAULT_SEARCH_RADIUS;
+  const radius = radiusMeters ?? DEFAULT_SEARCH_RADIUS;
 
   // Build URL with parameters
   let url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location}&radius=${radius}`;

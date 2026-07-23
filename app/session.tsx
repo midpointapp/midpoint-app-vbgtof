@@ -40,7 +40,7 @@ interface MeetSession {
   sender_lng: number;
   receiver_lat: number | null;
   receiver_lng: number | null;
-  status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired';
+  status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired' | 'no_places_found';
   invite_token: string;
   join_code?: string;
   expires_at: string;
@@ -68,6 +68,7 @@ const STATUS_LABEL: Record<string, string> = {
   proposed: 'Place proposed — waiting for response',
   confirmed: 'Meeting confirmed!',
   expired: 'Session expired',
+  no_places_found: 'No places found near the midpoint',
 };
 
 function getStatusLabel(status: string): string {
@@ -252,22 +253,18 @@ export default function SessionScreen() {
 
   const generatePlaces = async (id: string, sessionData: MeetSession) => {
     if (!sessionData.sender_lat || !sessionData.receiver_lat) return;
-
     if (
       typeof sessionData.sender_lat !== 'number' ||
       typeof sessionData.sender_lng !== 'number' ||
       typeof sessionData.receiver_lat !== 'number' ||
       typeof sessionData.receiver_lng !== 'number'
     ) return;
-
     if (
       isNaN(sessionData.sender_lat) || isNaN(sessionData.sender_lng) ||
       isNaN(sessionData.receiver_lat) || isNaN(sessionData.receiver_lng)
     ) return;
 
     try {
-      placesGeneratedRef.current = true;
-
       const generatedPlaces = await generateMidpointPlaces(
         sessionData.sender_lat,
         sessionData.sender_lng,
@@ -276,7 +273,14 @@ export default function SessionScreen() {
         sessionData.type
       );
 
-      if (generatedPlaces.length === 0) return;
+      if (generatedPlaces.length === 0) {
+        // Mark session as no_places_found so UI can show a message
+        await supabase
+          .from('meet_sessions')
+          .update({ status: 'no_places_found' })
+          .eq('id', id);
+        return;
+      }
 
       const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
         session_id: id,
@@ -294,9 +298,13 @@ export default function SessionScreen() {
 
       if (error) throw error;
 
+      // Only mark as generated AFTER successful insert
+      placesGeneratedRef.current = true;
+
       await loadSessionPlaces(id);
     } catch {
-      // silently ignore
+      // Reset ref so realtime can retry
+      placesGeneratedRef.current = false;
     }
   };
 
@@ -455,6 +463,19 @@ export default function SessionScreen() {
                 </Text>
               </>
             )}
+          </View>
+        )}
+
+        {/* No places found state */}
+        {session.status === 'no_places_found' && (
+          <View style={[styles.waitingCard, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="location-off" size={36} color={colors.textSecondary} />
+            <Text style={[styles.waitingTitle, { color: colors.text }]}>No places found</Text>
+            <Text style={[styles.waitingHint, { color: colors.textSecondary }]}>
+              {'No '}
+              {getCategoryLabel(session.type).toLowerCase()}
+              {' spots were found near your midpoint. Try a different category or meet closer together.'}
+            </Text>
           </View>
         )}
 
