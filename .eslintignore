@@ -9,3 +9,6 @@ node_modules/
 # Ignore build artifacts
 *.bundle.js
 *.bundle.js.map
+
+# Ignore Supabase Edge Functions (Deno, not Node)
+supabase/functions/

@@ -146,6 +146,7 @@ export default function SessionScreen() {
     return () => {
       channel.unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const loadSession = async (id: string, accessToken: string | null) => {
