@@ -122,7 +122,7 @@ export default function SessionScreen() {
             const updatedSession = payload.new as MeetSession;
             setSession(updatedSession);
 
-            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current) {
+            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSender) {
               generatePlaces(sessionId!, updatedSession);
             }
           }
@@ -152,6 +152,8 @@ export default function SessionScreen() {
 
   const loadSession = async (id: string, accessToken: string | null) => {
     try {
+      const senderRole = isSenderParam === 'true';
+      setIsSender(senderRole);
       setLoading(true);
       setError(null);
 
@@ -183,16 +185,13 @@ export default function SessionScreen() {
 
       setSession(data);
 
-      const senderRole = isSenderParam === 'true';
-      setIsSender(senderRole);
-
       await loadSessionPlaces(id);
 
       if (!senderRole && !data.receiver_lat) {
         await captureReceiverLocation(id, data);
       }
 
-      if (data.sender_lat && data.receiver_lat) {
+      if (senderRole && data.sender_lat && data.receiver_lat) {
         await generatePlaces(id, data);
       }
 
@@ -240,12 +239,7 @@ export default function SessionScreen() {
         .eq('id', id);
 
       if (error) throw error;
-
-      await generatePlaces(id, {
-        ...sessionData,
-        receiver_lat: location.coords.latitude,
-        receiver_lng: location.coords.longitude,
-      });
+      // Sender's realtime subscription will detect receiver_lat and trigger place generation
     } catch {
       Alert.alert('Error', 'Failed to capture location');
     }
