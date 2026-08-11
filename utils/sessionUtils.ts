@@ -46,7 +46,8 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     console.log('[SessionUtils] ✅ Session created successfully');
     console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
-    const message = `Join me on MidPoint Meet!\n\nYour join code is: ${joinCode}\n\nOpen the MidPoint Meet app and tap 'Join a Meet', then enter the code above.`;
+    const deepLink = `midpointmeet://session?sessionId=${sessionId}&token=${inviteToken}`;
+    const message = `Join me on MidPoint Meet!\n\nTap this link to join:\n${deepLink}\n\nOr enter code manually: ${joinCode}\n\nOpen the MidPoint Meet app → tap 'Join a Meet' → enter the code above.`;
 
     if (Platform.OS === 'web') {
       console.log('[SessionUtils] Web: copying join code to clipboard');
