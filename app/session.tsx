@@ -91,6 +91,7 @@ export default function SessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
   const placesGeneratedRef = useRef(false);
+  const isSenderRef = useRef(false);
 
   useEffect(() => {
     if (!sessionId) {
@@ -122,7 +123,7 @@ export default function SessionScreen() {
             const updatedSession = payload.new as MeetSession;
             setSession(updatedSession);
 
-            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSender) {
+            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSenderRef.current) {
               generatePlaces(sessionId!, updatedSession);
             }
           }
@@ -154,6 +155,7 @@ export default function SessionScreen() {
     try {
       const senderRole = isSenderParam === 'true';
       setIsSender(senderRole);
+      isSenderRef.current = senderRole;
       setLoading(true);
       setError(null);
 
@@ -187,15 +189,15 @@ export default function SessionScreen() {
 
       await loadSessionPlaces(id);
 
-      if (!senderRole && !data.receiver_lat) {
-        await captureReceiverLocation(id, data);
-      }
-
       if (senderRole && data.sender_lat && data.receiver_lat) {
         await generatePlaces(id, data);
       }
 
       setLoading(false);
+
+      if (!senderRole && !data.receiver_lat) {
+        setTimeout(() => captureReceiverLocation(id, data), 500);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load session. Please check your connection and try again.');
       setLoading(false);
@@ -223,7 +225,14 @@ export default function SessionScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Location permission is needed to find a meeting point.');
+        Alert.alert(
+          'Location Required',
+          'Please enable location access in Settings so we can find your midpoint.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
         return;
       }
 

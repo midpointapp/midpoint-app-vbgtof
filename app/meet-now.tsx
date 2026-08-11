@@ -13,6 +13,7 @@ import {
   ScrollView, 
   Alert, 
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 
 const MEETUP_TYPES = [
@@ -32,14 +33,22 @@ export default function MeetNowScreen() {
   const [creatingSession, setCreatingSession] = useState(false);
 
   useEffect(() => {
-    getCurrentLocation();
+    const timer = setTimeout(() => getCurrentLocation(), 500);
+    return () => clearTimeout(timer);
   }, []);
 
   async function getCurrentLocation() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required.');
+        Alert.alert(
+          'Location Required',
+          'Please enable location access in Settings to use this feature.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
         return;
       }
 
