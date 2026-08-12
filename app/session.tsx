@@ -464,6 +464,33 @@ export default function SessionScreen() {
                 <Text style={[styles.joinCodeHint, { color: colors.textSecondary }]}>
                   Receiver enters this in the app
                 </Text>
+                <View style={styles.shareRow}>
+                  <TouchableOpacity
+                    style={[styles.shareButton, { backgroundColor: colors.primary }]}
+                    onPress={async () => {
+                      const joinUrl = `https://yryjvcilhnnchaieieby.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
+                      const message = `Join me on MidPoint Meet! Tap the link to open the app:\n\n${joinUrl}\n\nOr enter code manually: ${session.join_code}`;
+                      console.log('[Session] Share button pressed, url:', joinUrl);
+                      await Share.share({ message });
+                    }}
+                  >
+                    <MaterialIcons name="share" size={18} color="#fff" />
+                    <Text style={styles.shareButtonText}>Share Invite</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.copyButton, { borderColor: colors.primary }]}
+                    onPress={async () => {
+                      const joinUrl = `https://yryjvcilhnnchaieieby.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
+                      const message = `Join me on MidPoint Meet! Tap the link to open the app:\n\n${joinUrl}\n\nOr enter code manually: ${session.join_code}`;
+                      console.log('[Session] Copy invite button pressed, url:', joinUrl);
+                      await Clipboard.setStringAsync(message);
+                      Alert.alert('Copied!', 'Invite link copied to clipboard');
+                    }}
+                  >
+                    <MaterialIcons name="content-copy" size={18} color={colors.primary} />
+                    <Text style={[styles.copyButtonText, { color: colors.primary }]}>Copy Link</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </View>
@@ -654,6 +681,37 @@ const styles = StyleSheet.create({
   },
   joinCodeHint: {
     fontSize: 12,
+  },
+  shareRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  shareButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  copyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   placeCard: {
     flexDirection: 'row',
