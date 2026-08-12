@@ -46,13 +46,15 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     console.log('[SessionUtils] ✅ Session created successfully');
     console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
-    const deepLink = `midpointmeet://session?sessionId=${sessionId}&token=${inviteToken}`;
-    const message = `Join me on MidPoint Meet!\n\nTap this link to join:\n${deepLink}\n\nOr enter code manually: ${joinCode}\n\nOpen the MidPoint Meet app → tap 'Join a Meet' → enter the code above.`;
+    const deepLink = `https://expo.dev/--/midpoint-meet/session?sessionId=${sessionId}&token=${inviteToken}`;
+    const message = `Join me on MidPoint Meet! 📍\n\n${deepLink}\n\nOr enter code: ${joinCode}`;
+
+    console.log('[SessionUtils] Deep link (HTTPS):', deepLink);
 
     if (Platform.OS === 'web') {
-      console.log('[SessionUtils] Web: copying join code to clipboard');
+      console.log('[SessionUtils] Web: copying invite message to clipboard');
       await Clipboard.setStringAsync(message);
-      Alert.alert('Code Copied!', message);
+      Alert.alert('Copied!', `Invite link copied to clipboard.\n\nCode: ${joinCode}`);
     } else {
       console.log('[SessionUtils] Native: sharing join code via Share sheet');
       await Share.share({ message });
