@@ -94,7 +94,7 @@ export default function MeetNowScreen() {
   const locationStatusColor = locationReady ? '#4CAF50' : colors.textSecondary;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => {
@@ -154,7 +154,8 @@ export default function MeetNowScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   backButton: { marginRight: 15 },
   title: { fontSize: 24, fontWeight: 'bold' },

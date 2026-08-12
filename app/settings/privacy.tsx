@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 40,
   },
   card: {
     borderRadius: 12,
