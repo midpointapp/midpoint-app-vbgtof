@@ -12,6 +12,7 @@ const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FAL
 console.log('[Supabase] EXPO_PUBLIC_SUPABASE_URL present:', !!process.env.EXPO_PUBLIC_SUPABASE_URL);
 console.log('[Supabase] URL first 25 chars:', supabaseUrl.slice(0, 25));
 console.log('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY present:', !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+console.log('[Supabase] Key prefix (first 20 chars):', supabaseAnonKey.slice(0, 20));
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -31,17 +32,21 @@ async function testSupabaseConnection(): Promise<void> {
 
     if (error) {
       const msg = error.message ?? '';
-      console.warn('[Supabase] ⚠️ Connection test failed — status:', status, '| message:', msg);
+      const code = (error as any).code ?? '';
+      console.warn('[Supabase] ⚠️ Connection test failed — status:', status, '| code:', code, '| message:', msg);
 
       if (msg.includes('project is suspended') || msg.includes('project is paused') || status === 503) {
-        console.error('[Supabase] 🔴 PROJECT IS PAUSED — go to https://supabase.com/dashboard/project/kjlbcgjvruyrqvkdtljz and click Restore');
-      } else if (status === 401 || msg.includes('JWT')) {
-        console.error('[Supabase] 🔴 AUTH ERROR — anon key may be wrong or expired');
+        console.error('[Supabase] 🔴 PROJECT IS PAUSED');
+      } else if (status === 401 && (msg.includes('JWT') || msg.includes('invalid') || msg.includes('token'))) {
+        console.error('[Supabase] 🔴 AUTH ERROR — anon key may be wrong or expired. Message:', msg);
+      } else if (msg.includes('permission denied') || status === 403) {
+        console.warn('[Supabase] ⚠️ RLS policy blocking connection test — this is non-fatal if the app works otherwise. Message:', msg);
       } else if (msg.includes('does not exist') || msg.includes('relation')) {
         console.error('[Supabase] 🔴 TABLE MISSING — meet_sessions table does not exist. Run migrations.');
       } else if (msg.includes('Network request failed') || msg.includes('fetch')) {
-        console.error('[Supabase] 🔴 NETWORK ERROR — Supabase project may be paused or URL is wrong');
-        console.error('[Supabase] URL being used:', supabaseUrl.slice(0, 40));
+        console.error('[Supabase] 🔴 NETWORK ERROR. URL:', supabaseUrl.slice(0, 40));
+      } else {
+        console.warn('[Supabase] ⚠️ Unexpected error — status:', status, 'message:', msg);
       }
     } else {
       console.log('[Supabase] ✅ Connection test passed — status:', status);
