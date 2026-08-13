@@ -156,6 +156,7 @@ export default function SessionScreen() {
       const senderRole = isSenderParam === 'true';
       setIsSender(senderRole);
       isSenderRef.current = senderRole;
+      placesGeneratedRef.current = false;
       setLoading(true);
       setError(null);
 
@@ -189,7 +190,14 @@ export default function SessionScreen() {
 
       await loadSessionPlaces(id);
 
-      if (senderRole && data.sender_lat && data.receiver_lat) {
+      // Only generate if sender, both coords exist, AND no places loaded yet
+      const { data: existingPlaces } = await supabase
+        .from('session_places')
+        .select('id')
+        .eq('session_id', id)
+        .limit(1);
+
+      if (senderRole && data.sender_lat && data.receiver_lat && (!existingPlaces || existingPlaces.length === 0)) {
         await generatePlaces(id, data);
       }
 
@@ -624,6 +632,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 40,
+    flexGrow: 1,
   },
   header: {
     flexDirection: 'row',

@@ -46,10 +46,10 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     console.log('[SessionUtils] ✅ Session created successfully');
     console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
-    const deepLink = `https://expo.dev/--/midpoint-meet/session?sessionId=${sessionId}&token=${inviteToken}`;
-    const message = `Join me on MidPoint Meet! 📍\n\n${deepLink}\n\nOr enter code: ${joinCode}`;
+    const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(inviteToken)}`;
+    const message = `Join me on MidPoint Meet!\n\nTap to open:\n${joinUrl}\n\nOr enter code: ${joinCode}`;
 
-    console.log('[SessionUtils] Deep link (HTTPS):', deepLink);
+    console.log('[SessionUtils] Join URL:', joinUrl);
 
     if (Platform.OS === 'web') {
       console.log('[SessionUtils] Web: copying invite message to clipboard');
