@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 // Metro inlines EXPO_PUBLIC_* from .env at build time.
 // Hardcoded fallbacks ensure preview/Expo Go never gets undefined.
 const FALLBACK_URL = 'https://kjlbcgjvruyrqvkdtljz.supabase.co';
-const FALLBACK_KEY = 'sb_publishable_gYoM_nIHjWmI_KAMf0NHXQ_xVBsYd1O';
+const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqbGJjZ2p2cnV5cnF2a2R0bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ2MDksImV4cCI6MjA5OTAyMDYwOX0.8qki0RzmMA7V9cvcY35XtXbUp5X-y5EtOtcFqrckRVA';
 
 const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL ?? FALLBACK_URL;
 const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FALLBACK_KEY;

@@ -258,7 +258,7 @@ export async function searchNearbyPlaces(
       // Web: proxy through Supabase Edge Function to avoid CORS
       const SUPABASE_URL = 'https://kjlbcgjvruyrqvkdtljz.supabase.co';
       const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-        'sb_publishable_gYoM_nIHjWmI_KAMf0NHXQ_xVBsYd1O';
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqbGJjZ2p2cnV5cnF2a2R0bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ2MDksImV4cCI6MjA5OTAyMDYwOX0.8qki0RzmMA7V9cvcY35XtXbUp5X-y5EtOtcFqrckRVA';
 
       console.log('[Places] Web platform — routing through Edge Function proxy');
       const proxyResponse = await fetch(`${SUPABASE_URL}/functions/v1/places-proxy`, {
