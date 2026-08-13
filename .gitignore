@@ -47,3 +47,5 @@ package-lock.json
 build/
 yarn.lock
 next-env.d.ts
+
+.env*.local

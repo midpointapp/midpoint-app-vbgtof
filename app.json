@@ -28,16 +28,29 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.Natively",
-      "permissions": ["READ_MEDIA_IMAGES", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro",
       "output": "single"
     },
-    "plugins": ["expo-font", "expo-router", "expo-web-browser"],
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-web-browser"
+    ],
     "scheme": "midpointmeet",
-    "experiments": {"typedRoutes": true},
-    "extra": {"router": {"origin": false}}
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    }
   }
 }
