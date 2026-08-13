@@ -23,7 +23,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-.env*.local
+# Environment files may contain secrets. Keep only the sanitized example.
+.env
+.env.*
+!.env.example
 
 *.tsbuildinfo
 
@@ -44,3 +47,5 @@ package-lock.json
 build/
 yarn.lock
 next-env.d.ts
+
+.env*.local

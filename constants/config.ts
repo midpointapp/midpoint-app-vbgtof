@@ -1,37 +1,14 @@
+// Google Places requests are proxied through the Supabase places-proxy Edge Function.
+// Do not ship a Google web-service API key in the mobile/web bundle.
+export const GOOGLE_PLACES_API_KEY = '';
 
-// Google Places API key (used for midpoint place search)
-// TEMP: fallback to hardcoded key if web env var isn't injected
-export const GOOGLE_PLACES_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ||
-  'AIzaSyBMxU0JXR2Iq1Lj0ao0Dj_5x134GuRaYd8';
-
-
-// Log API key status at startup
-console.log('[Places] API key present:', !!GOOGLE_PLACES_API_KEY);
-console.log('[Places] API key length:', GOOGLE_PLACES_API_KEY?.length || 0);
-
-// Base URL for the web app
 export const WEB_BASE_URL = 'https://web-midpoint-app-vbgtof.natively.dev';
-
-// Default search radius in meters
 export const DEFAULT_SEARCH_RADIUS = 5000;
 
-/**
- * Generate a shareable URL for a meet point (legacy flow)
- */
 export function generateShareUrl(meetPointId: string): string {
   return `${WEB_BASE_URL}/?meetPointId=${meetPointId}`;
 }
 
-/**
- * Generate a session URL with sessionId and token
- * 
- * CRITICAL FIX: Changed to use root path (/) instead of /session
- * This avoids server-level 404s even if SPA rewrites aren't configured
- * The root index.tsx will read params and redirect to /session
- */
 export function generateSessionUrl(sessionId: string, token: string): string {
-  const url = `${WEB_BASE_URL}/?sessionId=${sessionId}&token=${token}`;
-  console.log('[Config] ✅ Generated invite URL:', url);
-  return url;
+  return `${WEB_BASE_URL}/?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`;
 }

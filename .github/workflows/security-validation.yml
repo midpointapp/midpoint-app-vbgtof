@@ -1,0 +1,42 @@
+name: Security Branch Validation
+
+on:
+  push:
+    branches:
+      - agent/security-hardening
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Expo config validation
+        run: npx expo config --type public >/dev/null
+
+      - name: Web export
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: npx expo export -p web
