@@ -477,7 +477,7 @@ export default function SessionScreen() {
                     style={[styles.shareButton, { backgroundColor: colors.primary }]}
                     onPress={async () => {
                       const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
-                      const message = `Join me on MidPoint Meet! Tap the link to open the app:\n\n${joinUrl}\n\nOr enter code manually: ${session.join_code}`;
+                      const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${session.join_code}`;
                       console.log('[Session] Share button pressed, url:', joinUrl);
                       await Share.share({ message });
                     }}
@@ -489,7 +489,7 @@ export default function SessionScreen() {
                     style={[styles.copyButton, { borderColor: colors.primary }]}
                     onPress={async () => {
                       const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
-                      const message = `Join me on MidPoint Meet! Tap the link to open the app:\n\n${joinUrl}\n\nOr enter code manually: ${session.join_code}`;
+                      const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${session.join_code}`;
                       console.log('[Session] Copy invite button pressed, url:', joinUrl);
                       await Clipboard.setStringAsync(message);
                       Alert.alert('Copied!', 'Invite link copied to clipboard');

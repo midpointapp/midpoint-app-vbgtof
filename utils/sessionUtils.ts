@@ -47,7 +47,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
     const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(inviteToken)}`;
-    const message = `Join me on MidPoint Meet!\n\nTap to open:\n${joinUrl}\n\nOr enter code: ${joinCode}`;
+    const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${joinCode}`;
 
     console.log('[SessionUtils] Join URL:', joinUrl);
 
