@@ -476,9 +476,9 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.shareButton, { backgroundColor: colors.primary }]}
                     onPress={async () => {
-                      const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
-                      const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${session.join_code}`;
-                      console.log('[Session] Share button pressed, url:', joinUrl);
+                      const deepLink = `midpointmeet://session?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
+                      const message = `I want to meet you halfway! 📍\n\nTap to open MidPoint Meet:\n${deepLink}\n\nOr enter code: ${session.join_code}`;
+                      console.log('[Session] Share button pressed, deepLink:', deepLink);
                       await Share.share({ message });
                     }}
                   >
@@ -488,9 +488,9 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.copyButton, { borderColor: colors.primary }]}
                     onPress={async () => {
-                      const joinUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
-                      const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${session.join_code}`;
-                      console.log('[Session] Copy invite button pressed, url:', joinUrl);
+                      const deepLink = `midpointmeet://session?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
+                      const message = `I want to meet you halfway! 📍\n\nTap to open MidPoint Meet:\n${deepLink}\n\nOr enter code: ${session.join_code}`;
+                      console.log('[Session] Copy invite button pressed, deepLink:', deepLink);
                       await Clipboard.setStringAsync(message);
                       Alert.alert('Copied!', 'Invite link copied to clipboard');
                     }}
