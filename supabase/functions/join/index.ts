@@ -18,8 +18,8 @@ serve(async (req) => {
     return new Response('Missing sessionId or token', { status: 400, headers: CORS_HEADERS });
   }
 
-  const customSchemeLink = `midpointmeet://session?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}`;
-  const intentLink = `intent://session?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(token)}#Intent;scheme=midpointmeet;package=com.anonymous.Natively;end`;
+  const customSchemeLink = `midpointmeet://session/${encodeURIComponent(sessionId)}?token=${encodeURIComponent(token)}`;
+  const intentLink = `intent://session/${encodeURIComponent(sessionId)}?token=${encodeURIComponent(token)}#Intent;scheme=midpointmeet;package=com.midpointmeet.app;end`;
   const pageUrl = url.toString();
 
   const html = `<!DOCTYPE html>

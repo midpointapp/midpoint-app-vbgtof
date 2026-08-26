@@ -1,339 +1,287 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
   Platform,
-  Alert,
   Linking,
-  FlatList,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Location from 'expo-location';
 import { useThemeColors } from '@/styles/commonStyles';
+import { supabase } from '@/app/integrations/supabase/client';
 
-interface Participant {
+interface MeetSession {
   id: string;
-  session_id: string;
-  user_name: string;
-  user_lat: number | null;
-  user_lng: number | null;
-  isCurrentUser: boolean;
+  type: string;
+  sender_lat: number | null;
+  sender_lng: number | null;
+  receiver_lat: number | null;
+  receiver_lng: number | null;
+  status: string;
+  invite_token: string;
+  join_code: string;
+  expires_at: string;
+  proposed_place_id: string | null;
+  confirmed_place_id: string | null;
 }
 
-interface Spot {
+interface SessionPlace {
   id: string;
   session_id: string;
+  place_id: string;
   name: string;
-  category: string;
+  address: string;
   lat: number;
   lng: number;
-  address?: string;
-  distance?: number;
+  rank: number;
 }
 
-const SAMPLE_SPOTS: Spot[] = [
-  {
-    id: '1',
-    session_id: '1',
-    name: 'Blue Bottle Coffee',
-    category: 'Coffee',
-    lat: 37.7897,
-    lng: -122.3453,
-    address: '300 Webster St, Oakland, CA 94607',
-    distance: 2.5,
-  },
-  {
-    id: '2',
-    session_id: '1',
-    name: 'Starbucks Reserve',
-    category: 'Coffee',
-    lat: 37.7900,
-    lng: -122.3450,
-    address: '350 Grand Ave, Oakland, CA 94610',
-    distance: 2.7,
-  },
-  {
-    id: '3',
-    session_id: '1',
-    name: 'Philz Coffee',
-    category: 'Coffee',
-    lat: 37.7895,
-    lng: -122.3455,
-    address: '789 Mission St, San Francisco, CA 94103',
-    distance: 2.3,
-  },
-];
+const CATEGORY_LABELS: Record<string, string> = {
+  coffee: '☕ Coffee',
+  food: '🍔 Food',
+  marketplace: '🛍️ Marketplace',
+  gas: '⛽ Gas Station',
+  park: '🌳 Park',
+  police: '🚔 Police Station',
+};
 
-function calculateMidpoint(participants: Participant[]) {
-  const validParticipants = participants.filter(
-    (p) => p.user_lat !== null && p.user_lng !== null
-  );
-
-  if (validParticipants.length === 0) {
-    return null;
-  }
-
-  const sumLat = validParticipants.reduce((sum, p) => sum + (p.user_lat || 0), 0);
-  const sumLng = validParticipants.reduce((sum, p) => sum + (p.user_lng || 0), 0);
-
-  return {
-    latitude: sumLat / validParticipants.length,
-    longitude: sumLng / validParticipants.length,
-  };
-}
-
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-export default function SessionScreen() {
+export default function ReceiverSessionScreen() {
   const router = useRouter();
   const colors = useThemeColors();
-  const params = useLocalSearchParams();
-  const { id, midpointLat, midpointLng, contactName, type, safeMode } = params;
-  
-  const [refreshing, setRefreshing] = useState(false);
-  const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locationLoading, setLocationLoading] = useState(true);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
+  const { id, token } = useLocalSearchParams<{ id: string; token: string }>();
 
-  const isSafeMode = safeMode === 'true';
-  const sessionTitle = contactName ? `Meeting with ${contactName}` : 'MidPoint Session';
-  const sessionCategory = type || 'General';
+  const [session, setSession] = useState<MeetSession | null>(null);
+  const [places, setPlaces] = useState<SessionPlace[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [locationCaptured, setLocationCaptured] = useState(false);
 
-  const initialParticipants: Participant[] = useMemo(() => [
-    {
-      id: '1',
-      session_id: id as string,
-      user_name: 'You',
-      user_lat: null,
-      user_lng: null,
-      isCurrentUser: true,
-    },
-    {
-      id: '2',
-      session_id: id as string,
-      user_name: contactName as string || 'Contact',
-      user_lat: midpointLat ? parseFloat(midpointLat as string) * 2 - (myLocation?.latitude || 37.7749) : 37.8044,
-      user_lng: midpointLng ? parseFloat(midpointLng as string) * 2 - (myLocation?.longitude || -122.4194) : -122.2712,
-      isCurrentUser: false,
-    },
-  ], [id, contactName, midpointLat, midpointLng, myLocation]);
+  console.log('[ReceiverSession] Received id:', id, 'token:', token);
 
-  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
-
-  useEffect(() => {
-    getCurrentLocation();
-  }, []);
-
-  useEffect(() => {
-    if (myLocation) {
-      setParticipants(prev => prev.map(p => 
-        p.isCurrentUser 
-          ? { ...p, user_lat: myLocation.latitude, user_lng: myLocation.longitude }
-          : p
-      ));
-    }
-  }, [myLocation]);
-
-  const midpoint = useMemo(() => {
-    if (midpointLat && midpointLng) {
-      return { latitude: parseFloat(midpointLat as string), longitude: parseFloat(midpointLng as string) };
-    }
-    return calculateMidpoint(participants);
-  }, [midpointLat, midpointLng, participants]);
-  
-  const spotsWithDistance = useMemo(() => {
-    let spots = SAMPLE_SPOTS.filter((s) => s.session_id === id);
-    if (midpoint) {
-      spots = spots.map((spot) => ({
-        ...spot,
-        distance: calculateDistance(midpoint.latitude, midpoint.longitude, spot.lat, spot.lng),
-      })).sort((a, b) => (a.distance || 0) - (b.distance || 0));
-    }
-    return spots;
-  }, [id, midpoint]);
-
-  useEffect(() => {
-    if (midpoint) {
-      reverseGeocodeMidpoint(midpoint.latitude, midpoint.longitude);
-    }
-  }, [midpoint]);
-
-  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
+  const captureReceiverLocation = useCallback(async (sessionId: string) => {
+    console.log('[ReceiverSession] Capturing receiver location for session:', sessionId);
     try {
-      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-      
-      if (results && results.length > 0) {
-        const address = results[0];
-        const parts = [
-          address.streetNumber,
-          address.street,
-          address.city,
-          address.region,
-          address.postalCode,
-        ].filter(Boolean);
-        
-        const formattedAddress = parts.join(', ');
-        setMidpointAddress(formattedAddress || null);
-        console.log('Midpoint address:', formattedAddress);
-      }
-    } catch (error) {
-      console.error('Reverse geocoding error:', error);
-      setMidpointAddress(null);
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    try {
-      setLocationLoading(true);
-      setLocationError(null);
-
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
       if (status !== 'granted') {
-        setLocationError('Location access denied. Enable in Settings.');
-        console.log('Location permission denied');
-        setLocationLoading(false);
+        console.log('[ReceiverSession] Location permission denied');
+        Alert.alert('Location Required', 'Please enable location access so we can find your midpoint.');
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
+      console.log('[ReceiverSession] Got location:', { latitude, longitude });
 
-      setMyLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      const { error: updateError } = await supabase
+        .from('meet_sessions')
+        .update({ receiver_lat: latitude, receiver_lng: longitude, status: 'connected' })
+        .eq('id', sessionId);
 
-      console.log('Location obtained for session:', {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
+      if (updateError) {
+        console.error('[ReceiverSession] Failed to update receiver location:', updateError);
+      } else {
+        console.log('[ReceiverSession] Receiver location saved, status set to connected');
+        setLocationCaptured(true);
+      }
+    } catch (err) {
+      console.error('[ReceiverSession] Error capturing location:', err);
+    }
+  }, []);
 
-      setLocationLoading(false);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      setLocationError('Failed to get location. Check location services.');
-      setLocationLoading(false);
+  const loadPlaces = useCallback(async (sessionId: string) => {
+    console.log('[ReceiverSession] Loading session_places for session:', sessionId);
+    const { data, error: placesError } = await supabase
+      .from('session_places')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('rank', { ascending: true });
+
+    if (placesError) {
+      console.error('[ReceiverSession] Error loading places:', placesError);
+    } else {
+      console.log('[ReceiverSession] Loaded places:', data?.length ?? 0);
+      setPlaces(data ?? []);
+    }
+  }, []);
+
+  const loadSession = useCallback(async () => {
+    if (!id || !token) {
+      console.log('[ReceiverSession] Missing id or token');
+      setError('Invalid invite link');
+      setLoading(false);
+      return;
+    }
+
+    console.log('[ReceiverSession] Loading session from Supabase, id:', id);
+    const { data, error: fetchError } = await supabase
+      .from('meet_sessions')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    console.log('[ReceiverSession] Session load result:', { data, error: fetchError });
+
+    if (fetchError || !data) {
+      console.error('[ReceiverSession] Session not found:', fetchError);
+      setError('Session not found');
+      setLoading(false);
+      return;
+    }
+
+    if (data.invite_token !== token) {
+      console.log('[ReceiverSession] Token mismatch — invalid invite link');
+      setError('Invalid invite link');
+      setLoading(false);
+      return;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(data.expires_at);
+    if (expiresAt < now) {
+      console.log('[ReceiverSession] Session expired at:', data.expires_at);
+      setError('This invite has expired');
+      setLoading(false);
+      return;
+    }
+
+    setSession(data);
+    setLoading(false);
+
+    await loadPlaces(id);
+
+    if (data.receiver_lat === null) {
+      console.log('[ReceiverSession] No receiver location yet — capturing GPS');
+      await captureReceiverLocation(id);
+    } else {
+      console.log('[ReceiverSession] Receiver location already set');
+      setLocationCaptured(true);
+    }
+  }, [id, token, loadPlaces, captureReceiverLocation]);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  // Realtime subscription for session updates
+  useEffect(() => {
+    if (!id) return;
+
+    console.log('[ReceiverSession] Subscribing to realtime for session:', id);
+
+    const sessionChannel = supabase
+      .channel(`receiver-session-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meet_sessions', filter: `id=eq.${id}` },
+        (payload) => {
+          console.log('[ReceiverSession] Realtime session update:', payload.new);
+          setSession(payload.new as MeetSession);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'session_places', filter: `session_id=eq.${id}` },
+        (payload) => {
+          console.log('[ReceiverSession] Realtime places update:', payload.new);
+          loadPlaces(id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('[ReceiverSession] Unsubscribing realtime channel');
+      supabase.removeChannel(sessionChannel);
+    };
+  }, [id, loadPlaces]);
+
+  const handleAgree = async (placeId: string) => {
+    if (!session) return;
+    console.log('[ReceiverSession] Agree button pressed, placeId:', placeId);
+    const { error: updateError } = await supabase
+      .from('meet_sessions')
+      .update({ confirmed_place_id: placeId, status: 'confirmed' })
+      .eq('id', session.id);
+
+    if (updateError) {
+      console.error('[ReceiverSession] Error confirming place:', updateError);
+      Alert.alert('Error', 'Could not confirm the meeting place. Please try again.');
+    } else {
+      console.log('[ReceiverSession] Place confirmed:', placeId);
     }
   };
 
-  const handleRefreshMidpoint = async () => {
-    setRefreshing(true);
-    console.log('Refreshing midpoint...');
-    
-    await getCurrentLocation();
-    
-    setTimeout(() => {
-      setRefreshing(false);
-      if (myLocation) {
-        Alert.alert('Success', 'Midpoint refreshed with your current location!');
-      }
-    }, 1000);
+  const handleDeny = async () => {
+    if (!session) return;
+    console.log('[ReceiverSession] Deny button pressed for session:', session.id);
+    const { error: updateError } = await supabase
+      .from('meet_sessions')
+      .update({ proposed_place_id: null, status: 'connected' })
+      .eq('id', session.id);
+
+    if (updateError) {
+      console.error('[ReceiverSession] Error denying place:', updateError);
+      Alert.alert('Error', 'Could not deny the place. Please try again.');
+    } else {
+      console.log('[ReceiverSession] Place denied, status reset to connected');
+    }
   };
 
-  const handleNavigate = (spot: Spot) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
-    Linking.openURL(url).catch((err) =>
-      console.error('Error opening maps:', err)
-    );
+  const handleGetDirections = (place: SessionPlace) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
+    console.log('[ReceiverSession] Get Directions pressed, opening maps:', url);
+    Linking.openURL(url).catch((err) => console.error('[ReceiverSession] Error opening maps:', err));
   };
 
-  const handleInviteMore = () => {
-    const inviteLink = `https://midpoint.app/invite/SESSION123`;
-    Alert.alert(
-      'Invite More People',
-      `Share this link:\n\n${inviteLink}`,
-      [
-        { text: 'Copy Link', onPress: () => console.log('Link copied') },
-        { text: 'Close' },
-      ]
-    );
+  const handleGoHome = () => {
+    console.log('[ReceiverSession] Go Home pressed');
+    router.replace('/(tabs)/(home)/');
   };
 
-  const allUsersHaveLocation = participants.every((p) => p.user_lat !== null && p.user_lng !== null);
+  const categoryLabel = session ? (CATEGORY_LABELS[session.type] ?? session.type) : '';
 
-  const renderParticipant = ({ item, index }: { item: Participant; index: number }) => (
-    <React.Fragment key={item.id}>
-      <View style={styles.participantItem}>
-        <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
-          <MaterialIcons name="person" size={24} color={colors.card} />
-        </View>
-        <View style={styles.participantInfo}>
-          <Text style={[styles.participantName, { color: colors.text }]}>
-            {item.user_name}
-            {item.isCurrentUser && ' (You)'}
-          </Text>
-          {item.isCurrentUser && locationLoading && (
-            <Text style={[styles.participantStatus, { color: colors.textSecondary }]}>
-              Getting location...
-            </Text>
-          )}
-          {item.isCurrentUser && locationError && (
-            <Text style={[styles.participantStatus, { color: colors.error }]}>
-              {locationError}
-            </Text>
-          )}
-        </View>
-        {item.user_lat !== null && item.user_lng !== null ? (
-          <MaterialIcons name="location-on" size={20} color={colors.success} />
-        ) : (
-          <MaterialIcons name="location-off" size={20} color={colors.error} />
-        )}
+  const proposedPlace = session?.proposed_place_id
+    ? places.find((p) => p.id === session.proposed_place_id) ?? null
+    : null;
+
+  const confirmedPlace = session?.confirmed_place_id
+    ? places.find((p) => p.id === session.confirmed_place_id) ?? null
+    : null;
+
+  const isWaiting =
+    session &&
+    (session.status === 'waiting_for_receiver' || session.status === 'connected') &&
+    places.length === 0;
+
+  if (loading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading session...</Text>
       </View>
-      {index < participants.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-    </React.Fragment>
-  );
+    );
+  }
 
-  const renderSpot = ({ item, index }: { item: Spot; index: number }) => (
-    <React.Fragment key={item.id}>
-      <View style={styles.spotItem}>
-        <View style={[styles.spotIcon, { backgroundColor: colors.background }]}>
-          <MaterialIcons name="place" size={24} color={colors.secondary} />
-        </View>
-        <View style={styles.spotInfo}>
-          <Text style={[styles.spotName, { color: colors.text }]}>{item.name}</Text>
-          <Text style={[styles.spotCategory, { color: colors.primary }]}>{item.category}</Text>
-          {item.address && (
-            <Text style={[styles.spotAddress, { color: colors.text }]} numberOfLines={1}>
-              {item.address}
-            </Text>
-          )}
-          <Text style={[styles.spotCoordinates, { color: colors.textSecondary }]}>
-            {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
-          </Text>
-          <Text style={[styles.spotDistance, { color: colors.textSecondary }]}>
-            {item.distance?.toFixed(2)} km from midpoint
-          </Text>
-        </View>
+  if (error) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <MaterialIcons name="error-outline" size={56} color={colors.error} />
+        <Text style={[styles.errorTitle, { color: colors.text }]}>{error}</Text>
         <TouchableOpacity
-          style={styles.navigateButton}
-          onPress={() => handleNavigate(item)}
+          style={[styles.goHomeButton, { backgroundColor: colors.primary }]}
+          onPress={handleGoHome}
         >
-          <MaterialIcons name="navigation" size={32} color={colors.accent} />
+          <Text style={styles.goHomeButtonText}>Go Home</Text>
         </TouchableOpacity>
       </View>
-      {index < spotsWithDistance.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-    </React.Fragment>
-  );
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -344,137 +292,133 @@ export default function SessionScreen() {
           Platform.OS === 'android' && { paddingTop: 48 },
         ]}
       >
+        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backButton, { backgroundColor: colors.card }]}>
+          <TouchableOpacity
+            onPress={() => {
+              console.log('[ReceiverSession] Back button pressed');
+              router.back();
+            }}
+            style={[styles.backButton, { backgroundColor: colors.card }]}
+          >
             <MaterialIcons name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={[styles.sessionTitle, { color: colors.text }]}>{sessionTitle}</Text>
-            <Text style={[styles.sessionCategory, { color: colors.primary }]}>{sessionCategory}</Text>
+            <Text style={[styles.sessionTitle, { color: colors.text }]}>MidPoint Session</Text>
+            <Text style={[styles.sessionCategory, { color: colors.primary }]}>{categoryLabel}</Text>
           </View>
         </View>
 
-        {isSafeMode && (
-          <View style={[styles.safeModeIndicator, { backgroundColor: colors.success + '20', borderColor: colors.success }]}>
-            <Text style={[styles.safeModeText, { color: colors.success }]}>
-              🔒 Safe Meet Mode Active
+        {/* Waiting state */}
+        {isWaiting && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
+            <Text style={[styles.waitingTitle, { color: colors.text }]}>
+              Waiting for midpoint to be calculated...
+            </Text>
+            <Text style={[styles.waitingHint, { color: colors.textSecondary }]}>
+              {locationCaptured
+                ? 'Your location has been shared. Hang tight!'
+                : 'Sharing your location...'}
             </Text>
           </View>
         )}
 
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Participants</Text>
-          <FlatList
-            data={participants}
-            renderItem={renderParticipant}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-          
-          {!allUsersHaveLocation && (
-            <View style={[styles.warningBox, { backgroundColor: colors.error + '20', borderColor: colors.error }]}>
-              <MaterialIcons name="warning" size={20} color={colors.error} />
-              <Text style={[styles.warningText, { color: colors.error }]}>
-                Both users must enable location to compute a midpoint.
+        {/* Places list */}
+        {places.length > 0 && session?.status !== 'proposed' && session?.status !== 'confirmed' && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Meeting Places</Text>
+            {places.map((place, index) => (
+              <React.Fragment key={place.id}>
+                <View style={styles.placeItem}>
+                  <View style={[styles.rankBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.rankText}>{place.rank}</Text>
+                  </View>
+                  <View style={styles.placeInfo}>
+                    <Text style={[styles.placeName, { color: colors.text }]}>{place.name}</Text>
+                    <Text style={[styles.placeAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {place.address}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleGetDirections(place)}
+                    style={styles.directionsButton}
+                  >
+                    <MaterialIcons name="navigation" size={28} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
+                {index < places.length - 1 && (
+                  <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                )}
+              </React.Fragment>
+            ))}
+          </View>
+        )}
+
+        {/* Proposed place — Agree / Deny */}
+        {session?.status === 'proposed' && proposedPlace && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Proposed Meeting Place</Text>
+            <View style={styles.proposedPlaceBox}>
+              <MaterialIcons name="place" size={32} color={colors.primary} />
+              <Text style={[styles.proposedPlaceName, { color: colors.text }]}>{proposedPlace.name}</Text>
+              <Text style={[styles.proposedPlaceAddress, { color: colors.textSecondary }]}>
+                {proposedPlace.address}
               </Text>
             </View>
-          )}
-        </View>
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <View style={styles.midpointHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Midpoint Location</Text>
-            <TouchableOpacity
-              onPress={handleRefreshMidpoint}
-              disabled={refreshing}
-              style={styles.refreshButton}
-            >
-              <MaterialIcons name="refresh" size={20} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-          {midpoint ? (
-            <View>
-              <View style={[styles.mapPlaceholder, { backgroundColor: colors.background }]}>
-                <MaterialIcons name="map" size={48} color={colors.primary} />
-                <Text style={[styles.mapText, { color: colors.textSecondary }]}>
-                  Note: react-native-maps is not supported in Natively.
-                </Text>
-                {midpointAddress && (
-                  <Text style={[styles.addressText, { color: colors.text }]}>
-                    {midpointAddress}
-                  </Text>
-                )}
-                <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
-                  {midpoint.latitude.toFixed(4)}, {midpoint.longitude.toFixed(4)}
-                </Text>
-              </View>
+            <View style={styles.actionRow}>
               <TouchableOpacity
-                style={[styles.openMapsButton, { backgroundColor: colors.accent }]}
-                onPress={() => {
-                  const url = `https://www.google.com/maps/search/?api=1&query=${midpoint.latitude},${midpoint.longitude}`;
-                  Linking.openURL(url);
-                }}
+                style={[styles.agreeButton, { backgroundColor: colors.success }]}
+                onPress={() => handleAgree(proposedPlace.id)}
               >
-                <MaterialIcons name="map" size={20} color="#FFFFFF" />
-                <Text style={styles.openMapsButtonText}>Open in Maps</Text>
+                <MaterialIcons name="check" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Agree</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.denyButton, { borderColor: colors.error }]}
+                onPress={handleDeny}
+              >
+                <MaterialIcons name="close" size={20} color={colors.error} />
+                <Text style={[styles.denyButtonText, { color: colors.error }]}>Deny</Text>
               </TouchableOpacity>
             </View>
-          ) : (
-            <View>
-              <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
-                Waiting for participant locations...
-              </Text>
-              {locationLoading && (
-                <Text style={[styles.noMidpointText, { color: colors.textSecondary }]}>
-                  Getting your location...
-                </Text>
-              )}
-              {locationError && (
-                <TouchableOpacity 
-                  style={[styles.settingsButton, { backgroundColor: colors.primary }]}
-                  onPress={() => Linking.openSettings()}
-                >
-                  <Text style={styles.settingsButtonText}>Open Settings</Text>
-                </TouchableOpacity>
-              )}
+          </View>
+        )}
+
+        {/* Confirmed place */}
+        {session?.status === 'confirmed' && confirmedPlace && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <View style={[styles.confirmedBadge, { backgroundColor: colors.success + '20' }]}>
+              <MaterialIcons name="check-circle" size={20} color={colors.success} />
+              <Text style={[styles.confirmedBadgeText, { color: colors.success }]}>Meeting Confirmed!</Text>
             </View>
-          )}
-        </View>
+            <View style={styles.proposedPlaceBox}>
+              <MaterialIcons name="place" size={32} color={colors.primary} />
+              <Text style={[styles.proposedPlaceName, { color: colors.text }]}>{confirmedPlace.name}</Text>
+              <Text style={[styles.proposedPlaceAddress, { color: colors.textSecondary }]}>
+                {confirmedPlace.address}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.directionsFullButton, { backgroundColor: colors.accent }]}
+              onPress={() => handleGetDirections(confirmedPlace)}
+            >
+              <MaterialIcons name="navigation" size={20} color="#fff" />
+              <Text style={styles.directionsFullButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Nearby Meeting Places</Text>
-          <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-            Public locations near the midpoint
-          </Text>
-          {midpoint && spotsWithDistance.length > 0 ? (
-            <FlatList
-              data={spotsWithDistance}
-              renderItem={renderSpot}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-            />
-          ) : !midpoint ? (
-            <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
-              Calculate midpoint first to see nearby places.
+        {/* No places found */}
+        {session?.status === 'no_places_found' && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="location-off" size={36} color={colors.textSecondary} style={styles.centeredIcon} />
+            <Text style={[styles.waitingTitle, { color: colors.text }]}>No places found</Text>
+            <Text style={[styles.waitingHint, { color: colors.textSecondary }]}>
+              No spots were found near your midpoint. Try a different category or meet closer together.
             </Text>
-          ) : (
-            <Text style={[styles.noSpotsText, { color: colors.textSecondary }]}>
-              No spots found. Try refreshing the midpoint.
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.outlineButton, styles.actionButton, { borderColor: colors.primary }]}
-            onPress={handleInviteMore}
-          >
-            <MaterialIcons name="person-add" size={20} color={colors.primary} />
-            <Text style={[styles.outlineButtonText, styles.actionButtonText, { color: colors.primary }]}>
-              Invite More
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -483,6 +427,34 @@ export default function SessionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 12,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  goHomeButton: {
+    marginTop: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+  },
+  goHomeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
@@ -509,29 +481,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sessionTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   sessionCategory: {
     fontSize: 16,
   },
-  safeModeIndicator: {
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 2,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  safeModeText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
   card: {
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   cardTitle: {
@@ -539,183 +499,135 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
   },
-  cardSubtitle: {
-    fontSize: 14,
+  spinner: {
     marginBottom: 12,
-    marginTop: -8,
   },
-  participantItem: {
+  waitingTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  waitingHint: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  centeredIcon: {
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  placeItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 8,
   },
-  participantAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  participantInfo: {
-    flex: 1,
-  },
-  participantName: {
-    fontSize: 16,
-  },
-  participantStatus: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 12,
-  },
-  warningText: {
-    flex: 1,
+  rankText: {
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-  },
-  midpointHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  mapPlaceholder: {
-    height: 200,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    marginBottom: 12,
-  },
-  mapText: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  addressText: {
-    fontSize: 15,
     fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 6,
   },
-  coordinatesText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-  openMapsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 8,
-  },
-  openMapsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  settingsButton: {
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  settingsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  noMidpointText: {
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  spotItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  spotIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  spotInfo: {
+  placeInfo: {
     flex: 1,
   },
-  spotName: {
+  placeName: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
-  spotCategory: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  spotAddress: {
+  placeAddress: {
     fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 2,
+    lineHeight: 18,
   },
-  spotCoordinates: {
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    marginBottom: 2,
-  },
-  spotDistance: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  navigateButton: {
+  directionsButton: {
     padding: 4,
   },
-  noSpotsText: {
-    fontSize: 14,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  outlineButton: {
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    padding: 16,
+  proposedPlaceBox: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-  },
-  outlineButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  actionButtons: {
-    gap: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
+    paddingVertical: 16,
     gap: 8,
   },
+  proposedPlaceName: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  proposedPlaceAddress: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  agreeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  denyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+  },
   actionButtonText: {
-    marginLeft: 0,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  denyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  confirmedBadgeText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  directionsFullButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  directionsFullButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
