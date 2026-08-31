@@ -476,7 +476,7 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.shareButton, { backgroundColor: colors.primary }]}
                     onPress={async () => {
-                      const deepLink = `midpointmeet://session/${session.id}?token=${encodeURIComponent(session.invite_token)}`;
+                      const deepLink = `midpointmeet://session?sessionId=${session.id}&token=${encodeURIComponent(session.invite_token)}&isSender=false`;
                       const message = `Join me on MidPoint Meet! Tap to open the app: ${deepLink}\n\nOr enter code: ${session.join_code}`;
                       console.log('[Session] Share button pressed, deepLink:', deepLink);
                       await Share.share({ message });
@@ -488,7 +488,7 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.copyButton, { borderColor: colors.primary }]}
                     onPress={async () => {
-                      const deepLink = `midpointmeet://session/${session.id}?token=${encodeURIComponent(session.invite_token)}`;
+                      const deepLink = `midpointmeet://session?sessionId=${session.id}&token=${encodeURIComponent(session.invite_token)}&isSender=false`;
                       const message = `Join me on MidPoint Meet! Tap to open the app: ${deepLink}\n\nOr enter code: ${session.join_code}`;
                       console.log('[Session] Copy invite button pressed, deepLink:', deepLink);
                       await Clipboard.setStringAsync(message);
