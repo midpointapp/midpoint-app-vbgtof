@@ -1,13 +1,11 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
 };
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
+    return new Response('ok', { status: 200, headers: CORS_HEADERS });
   }
 
   const url = new URL(req.url);
@@ -74,7 +72,6 @@ serve(async (req) => {
     }
 
     btn.addEventListener('click', function(e) {
-      // Show fallback message after 2.5s if app didn't open
       setTimeout(function() {
         fallback.style.display = 'block';
       }, 2500);
@@ -84,8 +81,10 @@ serve(async (req) => {
 </html>`;
 
   return new Response(html, {
+    status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
       ...CORS_HEADERS,
     },
   });
