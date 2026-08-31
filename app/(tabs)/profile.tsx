@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -30,6 +31,7 @@ interface UserData {
 export default function ProfileScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
 
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
@@ -176,7 +178,7 @@ export default function ProfileScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            Platform.OS === 'android' && { paddingTop: 48 },
+            { paddingTop: insets.top + 16 },
           ]}
           keyboardShouldPersistTaps="handled"
         >
@@ -328,7 +330,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 16 },
   scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
   header: { alignItems: 'center', marginBottom: 32 },
   avatarContainer: { position: 'relative', marginBottom: 20 },
   avatar: { width: 100, height: 100, borderRadius: 50 },

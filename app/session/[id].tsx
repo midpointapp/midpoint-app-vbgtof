@@ -14,6 +14,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
 
@@ -55,6 +56,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ReceiverSessionScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const { id, token } = useLocalSearchParams<{ id: string; token: string }>();
 
   const [session, setSession] = useState<MeetSession | null>(null);
@@ -289,7 +291,7 @@ export default function ReceiverSessionScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          Platform.OS === 'android' && { paddingTop: 48 },
+          { paddingTop: insets.top + 16 },
         ]}
       >
         {/* Header */}
@@ -461,7 +463,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 120,
   },
   header: {

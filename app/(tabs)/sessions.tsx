@@ -6,11 +6,11 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
 import { supabase } from '@/app/integrations/supabase/client';
 
@@ -43,6 +43,7 @@ function getTitleFromType(type: string): string {
 export default function SessionsScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -168,7 +169,7 @@ export default function SessionsScreen() {
         ListEmptyComponent={showEmpty ? renderEmptyState : null}
         contentContainerStyle={[
           styles.scrollContent,
-          Platform.OS === 'android' && { paddingTop: 48 },
+          { paddingTop: insets.top + 16 },
         ]}
       />
     </View>
@@ -181,7 +182,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 120,
   },
   title: {
@@ -214,7 +214,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   sessionCard: {

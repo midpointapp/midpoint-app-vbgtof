@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/app/integrations/supabase/client';
@@ -9,6 +10,7 @@ import { supabase } from '@/app/integrations/supabase/client';
 export default function HomeScreen() {
   const router = useRouter();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const [joinCode, setJoinCode] = useState('');
   const [joining, setJoining] = useState(false);
 
@@ -68,7 +70,7 @@ export default function HomeScreen() {
   const joinCodeDisplay = joinCode.toUpperCase();
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       <LinearGradient
         colors={[colors.primary + '20', colors.background]}
         style={styles.gradientBackground}
