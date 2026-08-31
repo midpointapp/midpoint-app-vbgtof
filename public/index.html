@@ -1,139 +1,70 @@
 <!DOCTYPE html>
-<html lang="%LANG_ISO_CODE%">
-  <head>
-    <meta charset="utf-8" />
-    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <meta http-Equiv="Cache-Control" Content="no-cache" />
-    <meta http-Equiv="Pragma" Content="no-cache" />
-    <meta http-Equiv="Expires" Content="0" />
-    <link rel="manifest" href="/manifest.json" />
-    <title>%WEB_TITLE%</title>
-    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
-    <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
-        height: 100%;
-      }
-      /* These styles disable body scrolling if you are using <ScrollView> */
-      body {
-        overflow: hidden;
-      }
-      /* These styles make the root element full-height */
-      #root {
-        display: flex;
-        height: 100%;
-        flex: 1;
-      }
-    </style>
-    <script>
-    window.canInstall = false;
-    window.deferredPrompt = null;
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Join MidPoint Meet</title>
+  <meta name="description" content="Someone wants to meet you halfway. Tap to open MidPoint Meet and find your midpoint." />
+  <meta property="og:title" content="Join MidPoint Meet" />
+  <meta property="og:description" content="Someone wants to meet you halfway. Tap to open MidPoint Meet." />
+  <meta property="og:type" content="website" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; background: #0f0f0f; color: #fff; text-align: center; padding: 32px 24px;
+    }
+    .icon { font-size: 64px; margin-bottom: 24px; }
+    h1 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+    p { color: #aaa; font-size: 16px; margin-bottom: 40px; line-height: 1.5; max-width: 320px; }
+    .btn {
+      display: inline-block; background: #3F51B5; color: #fff;
+      padding: 18px 40px; border-radius: 14px; text-decoration: none;
+      font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
+      box-shadow: 0 4px 24px rgba(63,81,181,0.4);
+      cursor: pointer; border: none; width: 100%; max-width: 320px;
+    }
+    .hint { margin-top: 20px; color: #666; font-size: 13px; }
+    #fallback { display: none; margin-top: 24px; color: #f59e0b; font-size: 14px; max-width: 320px; }
+    #error { display: none; color: #ef4444; font-size: 15px; margin-top: 24px; max-width: 320px; }
+  </style>
+</head>
+<body>
+  <div class="icon">📍</div>
+  <h1>Join MidPoint Meet</h1>
+  <p>Someone wants to meet you halfway.<br/>Tap below to open the app and find your midpoint.</p>
 
-    window.addEventListener('load', async () => {
+  <a class="btn" id="openBtn" href="#">Open MidPoint Meet</a>
 
-      // Skip PWA installation and service worker code if we're in development mode (index.ts.bundle exists)
-      // or if we're in Expo development environment
-      if (!document.querySelector('script[src*="index.ts.bundle"]') && !window.location.href.includes('exp.direct')) {
+  <p class="hint">Make sure MidPoint Meet is installed</p>
+  <div id="fallback">App didn't open? Make sure MidPoint Meet is installed, then tap the button again.</div>
+  <div id="error">Invalid invite link — missing session ID or token.</div>
 
-        window.handleInstallClick = async () => {
-          console.debug("handleInstallClick called");
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var sessionId = params.get('sessionId');
+    var token = params.get('token');
+    var btn = document.getElementById('openBtn');
+    var fallback = document.getElementById('fallback');
+    var errorDiv = document.getElementById('error');
 
-          if (!window.deferredPrompt) return;
+    if (!sessionId || !token) {
+      btn.style.display = 'none';
+      errorDiv.style.display = 'block';
+    } else {
+      var isAndroid = /android/i.test(navigator.userAgent);
+      var customSchemeLink = 'midpointmeet://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false';
+      var intentLink = 'intent://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false#Intent;scheme=midpointmeet;package=com.midpointmeet.app;end';
 
-          // Show the install prompt
-          window.deferredPrompt.prompt();
+      btn.href = isAndroid ? intentLink : customSchemeLink;
 
-          console.debug("window.deferredPrompt.prompt called");
-
-          // Wait for the user to respond to the prompt
-          const { outcome } = await window.deferredPrompt.userChoice;
-
-          // Hide the install button
-          if (outcome === 'accepted') {
-            canInstall = false;
-          }
-        };
-
-        window.handleBeforeInstallPrompt = (e) => {
-          console.debug("handleBeforeInstallPrompt called");
-
-          // Prevent Chrome 67 and earlier from automatically showing the prompt
-          e.preventDefault();
-
-          // Stash the event so it can be triggered later
-          window.deferredPrompt = e;
-
-          // Update UI to notify the user they can install the PWA
-          window.canInstall = true;
-        };
-
-        window.addEventListener('beforeinstallprompt', window.handleBeforeInstallPrompt);
-
-        if ('serviceWorker' in navigator) {
-          // Unregister any existing service worker first
-          const existingRegistration = await navigator.serviceWorker.getRegistration();
-          if (existingRegistration) {
-            console.log('Unregistering existing service worker');
-            await existingRegistration.unregister();
-          }
-
-          const registration = await navigator.serviceWorker.register('./sw.js');
-          console.log('Service Worker registered with scope:', registration.scope);
-
-          // Check for updates every 30 seconds
-          setInterval(async () => {
-            try {
-              await registration.update();
-            } catch (error) {
-              console.error('Error checking for updates:', error);
-            }
-          }, 200);
-
-          // Listen for updates
-          registration.addEventListener('updatefound', () => {
-            console.log('Service Worker update found');
-            if (registration.installing) {
-              registration.installing.addEventListener('statechange', () => {
-                if (registration.waiting) {
-                  // Automatically activate the new service worker
-                  registration.waiting.postMessage('SKIP_WAITING');
-                }
-              });
-            }
-          });
-
-          // // Listen for controller change to refresh the page
-          // navigator.serviceWorker.addEventListener('controllerchange', () => {
-          //   console.log('New service worker activated, refreshing page');
-          //   window.location.reload();
-          // });
-
-          navigator.serviceWorker.addEventListener('activate', function(event) {
-            console.log('Service Worker activated');
-            event.waitUntil(
-              caches.keys().then((cacheNames) => {
-                return Promise.all(
-                  cacheNames.map((cacheName) => {
-                    return caches.delete(cacheName);
-                  })
-                );
-              })
-            );
-          });
-        }
-      }
-    });
-    </script>
-  </head>
-
-  <body class="">
-    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
-    <noscript>
-      You need to enable JavaScript to run this app.
-    </noscript>
-    <!-- The root element for your Expo app. -->
-    <div id="root"></div>
-  </body>
+      btn.addEventListener('click', function() {
+        setTimeout(function() {
+          fallback.style.display = 'block';
+        }, 2500);
+      });
+    }
+  </script>
+</body>
 </html>
