@@ -490,7 +490,7 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.shareButton, { backgroundColor: colors.primary }]}
                     onPress={async () => {
-                      const inviteUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${session.id}&token=${encodeURIComponent(session.invite_token)}`;
+                      const inviteUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
                       const message = `Join me on MidPoint Meet!\n\nTap to join: ${inviteUrl}\n\nOr enter code: ${session.join_code}`;
                       console.log('[Session] Share button pressed, inviteUrl:', inviteUrl);
                       await Share.share({ message });
@@ -502,7 +502,7 @@ export default function SessionScreen() {
                   <TouchableOpacity
                     style={[styles.copyButton, { borderColor: colors.primary }]}
                     onPress={async () => {
-                      const inviteUrl = `https://kjlbcgjvruyrqvkdtljz.supabase.co/functions/v1/join?sessionId=${session.id}&token=${encodeURIComponent(session.invite_token)}`;
+                      const inviteUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
                       const message = `Join me on MidPoint Meet!\n\nTap to join: ${inviteUrl}\n\nOr enter code: ${session.join_code}`;
                       console.log('[Session] Copy invite button pressed, inviteUrl:', inviteUrl);
                       await Clipboard.setStringAsync(message);
