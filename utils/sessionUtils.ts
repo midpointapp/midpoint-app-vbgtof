@@ -49,7 +49,8 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     const joinUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(inviteToken)}`;
     const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${joinCode}`;
 
-    console.log('[SessionUtils] Join URL (sessionId only):', `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(sessionId)}`);
+    const _urlObj = new URL(joinUrl);
+    console.log('[SessionUtils] ✅ BUNDLE_V2 invite origin+path:', _urlObj.origin + _urlObj.pathname);
 
     if (Platform.OS === 'web') {
       console.log('[SessionUtils] Web: copying invite message to clipboard');
