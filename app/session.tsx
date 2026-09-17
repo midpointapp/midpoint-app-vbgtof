@@ -90,19 +90,33 @@ export default function SessionScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
+  const [paramsReady, setParamsReady] = useState(false);
   const placesGeneratedRef = useRef(false);
   const isSenderRef = useRef(false);
 
   useEffect(() => {
+    // expo-router may render before params are populated on cold launch from a deep link.
+    // Wait one tick for params to settle before checking sessionId.
+    const timer = setTimeout(() => {
+      console.log('[Session] Params ready, sessionId:', sessionId ?? 'undefined');
+      setParamsReady(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!paramsReady) return;
     if (!sessionId) {
+      console.log('[Session] No sessionId after params settled — showing error');
       setError('Invalid session link. The URL is missing the session ID. Please check the link and try again.');
       setLoading(false);
       return;
     }
-
+    console.log('[Session] Loading session:', sessionId);
     loadSession(sessionId, token || null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, token]);
+  }, [paramsReady, sessionId, token]);
 
   useEffect(() => {
     if (!sessionId) return;
