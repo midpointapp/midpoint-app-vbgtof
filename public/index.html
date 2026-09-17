@@ -1,70 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Join MidPoint Meet</title>
-  <meta name="description" content="Someone wants to meet you halfway. Tap to open MidPoint Meet and find your midpoint." />
-  <meta property="og:title" content="Join MidPoint Meet" />
-  <meta property="og:description" content="Someone wants to meet you halfway. Tap to open MidPoint Meet." />
-  <meta property="og:type" content="website" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MidPoint Meet – Join Session</title>
+  <meta name="description" content="You've been invited to find a midpoint meeting place." />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      min-height: 100vh; background: #0f0f0f; color: #fff; text-align: center; padding: 32px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #3F51B5 0%, #1a237e 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
     }
-    .icon { font-size: 64px; margin-bottom: 24px; }
-    h1 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
-    p { color: #aaa; font-size: 16px; margin-bottom: 40px; line-height: 1.5; max-width: 320px; }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .icon { font-size: 64px; margin-bottom: 16px; }
+    h1 { font-size: 26px; font-weight: 700; color: #1a237e; margin-bottom: 8px; }
+    .subtitle { font-size: 16px; color: #555; margin-bottom: 32px; line-height: 1.5; }
     .btn {
-      display: inline-block; background: #3F51B5; color: #fff;
-      padding: 18px 40px; border-radius: 14px; text-decoration: none;
-      font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
-      box-shadow: 0 4px 24px rgba(63,81,181,0.4);
-      cursor: pointer; border: none; width: 100%; max-width: 320px;
+      display: block;
+      background: #3F51B5;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 18px 32px;
+      border-radius: 14px;
+      text-decoration: none;
+      margin-bottom: 16px;
+      transition: background 0.2s;
     }
-    .hint { margin-top: 20px; color: #666; font-size: 13px; }
-    #fallback { display: none; margin-top: 24px; color: #f59e0b; font-size: 14px; max-width: 320px; }
-    #error { display: none; color: #ef4444; font-size: 15px; margin-top: 24px; max-width: 320px; }
+    .btn:hover { background: #303f9f; }
+    .error { color: #c62828; font-size: 15px; margin-top: 16px; }
+    .note { font-size: 13px; color: #888; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <div class="icon">📍</div>
-  <h1>Join MidPoint Meet</h1>
-  <p>Someone wants to meet you halfway.<br/>Tap below to open the app and find your midpoint.</p>
-
-  <a class="btn" id="openBtn" href="#">Open MidPoint Meet</a>
-
-  <p class="hint">Make sure MidPoint Meet is installed</p>
-  <div id="fallback">App didn't open? Make sure MidPoint Meet is installed, then tap the button again.</div>
-  <div id="error">Invalid invite link — missing session ID or token.</div>
-
+  <div class="card">
+    <div class="icon">📍</div>
+    <h1>MidPoint Meet</h1>
+    <p class="subtitle" id="subtitle">You've been invited to find a midpoint meeting place. Tap below to open the app.</p>
+    <a class="btn" id="openBtn" href="#">Open MidPoint Meet</a>
+    <p class="note">Make sure MidPoint Meet is installed on your device.</p>
+    <p class="error" id="errorMsg"></p>
+  </div>
   <script>
-    var params = new URLSearchParams(window.location.search);
-    var sessionId = params.get('sessionId');
-    var token = params.get('token');
-    var btn = document.getElementById('openBtn');
-    var fallback = document.getElementById('fallback');
-    var errorDiv = document.getElementById('error');
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var sessionId = params.get('sessionId');
+      var token = params.get('token');
+      var btn = document.getElementById('openBtn');
+      var errorMsg = document.getElementById('errorMsg');
 
-    if (!sessionId || !token) {
-      btn.style.display = 'none';
-      errorDiv.style.display = 'block';
-    } else {
-      var isAndroid = /android/i.test(navigator.userAgent);
-      var customSchemeLink = 'midpointmeet://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false';
-      var intentLink = 'intent://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false#Intent;scheme=midpointmeet;package=com.midpointmeet.app;end';
+      if (!sessionId || !token) {
+        btn.style.display = 'none';
+        errorMsg.textContent = 'Invalid invite link — missing session ID or token. Please ask the sender to share the link again.';
+        return;
+      }
 
-      btn.href = isAndroid ? intentLink : customSchemeLink;
+      var deepLink = 'midpointmeet://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false';
+      btn.href = deepLink;
 
-      btn.addEventListener('click', function() {
-        setTimeout(function() {
-          fallback.style.display = 'block';
-        }, 2500);
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        window.location.href = deepLink;
+        // Fallback: if app not installed after 2s, show store link
+        setTimeout(function () {
+          document.getElementById('subtitle').textContent = "Couldn't open the app. Make sure MidPoint Meet is installed.";
+        }, 2000);
       });
-    }
+    })();
   </script>
 </body>
 </html>
