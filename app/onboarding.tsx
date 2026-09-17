@@ -61,7 +61,7 @@ export default function OnboardingScreen() {
       homeArea: '',
     });
     
-    router.replace('/(tabs)/(home)/');
+    router.replace('/(tabs)/(home)');
   };
 
   const handleSignUp = async () => {
@@ -79,7 +79,7 @@ export default function OnboardingScreen() {
       homeArea: homeArea || '',
     });
     
-    router.replace('/(tabs)/(home)/');
+    router.replace('/(tabs)/(home)');
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -203,7 +203,7 @@ export default function OnboardingScreen() {
             style={[styles.socialButton, { backgroundColor: colors.card, borderColor: colors.border }]}
             onPress={() => handleSocialLogin('Google')}
           >
-            <MaterialIcons name="google" size={24} color={colors.text} />
+            <MaterialIcons name={"google" as any} size={24} color={colors.text} />
             <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Google</Text>
           </TouchableOpacity>
         </View>

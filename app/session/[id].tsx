@@ -243,7 +243,7 @@ export default function ReceiverSessionScreen() {
 
   const handleGoHome = () => {
     console.log('[ReceiverSession] Go Home pressed');
-    router.replace('/(tabs)/(home)/');
+    router.replace('/(tabs)/(home)');
   };
 
   const categoryLabel = session ? (CATEGORY_LABELS[session.type] ?? session.type) : '';

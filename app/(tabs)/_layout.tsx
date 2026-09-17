@@ -131,7 +131,8 @@ function FloatingTabBar({ tabs }: { tabs: TabBarItem[] }) {
                   backgroundColor: isDark
                     ? 'rgba(33, 33, 33, 0.95)'
                     : 'rgba(255, 255, 255, 0.95)',
-                  // @ts-expect-error web-only style
+                  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                  // @ts-ignore web-only style
                   backdropFilter: 'blur(10px)',
                 },
               }),
@@ -195,7 +196,7 @@ export default function TabLayout() {
   const tabs: TabBarItem[] = [
     {
       name: '(home)',
-      route: '/(tabs)/(home)/',
+      route: '/(tabs)/(home)',
       icon: 'home',
       label: 'Home',
     },

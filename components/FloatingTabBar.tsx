@@ -60,9 +60,9 @@ export default function FloatingTabBar({
         score = 100;
       } else if (pathname.startsWith(tab.route as string)) {
         score = 80;
-      } else if (pathname.includes(tab.name)) {
+      } else if ((pathname as string).includes(tab.name)) {
         score = 60;
-      } else if (tab.route.includes('/(tabs)/') && pathname.includes(tab.route.split('/(tabs)/')[1])) {
+      } else if ((tab.route as string).includes('/(tabs)/') && (pathname as string).includes((tab.route as string).split('/(tabs)/')[1])) {
         score = 40;
       }
 

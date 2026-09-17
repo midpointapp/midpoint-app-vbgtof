@@ -416,7 +416,7 @@ export default function SessionScreen() {
             style={[styles.button, { backgroundColor: colors.primary }]}
             onPress={() => {
               console.log('[Session] Navigating home from error state');
-              router.push('/(tabs)/(home)/');
+              router.push('/(tabs)/(home)');
             }}
           >
             <Text style={styles.buttonText}>Go Home</Text>

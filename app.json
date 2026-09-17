@@ -41,7 +41,10 @@
               "scheme": "midpointmeet"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -53,7 +56,11 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-location",
+      "expo-splash-screen",
+      "expo-status-bar",
+      "@react-native-community/datetimepicker"
     ],
     "scheme": "midpointmeet",
     "experiments": {
