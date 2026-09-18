@@ -32,10 +32,6 @@ export default function NotificationsScreen() {
     newMeetRequests: true,
   });
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
   const loadSettings = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -47,6 +43,11 @@ export default function NotificationsScreen() {
       console.error('Error loading notification settings:', error);
     }
   };
+
+  useEffect(() => {
+    setTimeout(() => loadSettings(), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveSettings = async (newSettings: NotificationSettings) => {
     try {

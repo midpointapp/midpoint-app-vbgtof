@@ -40,10 +40,6 @@ export default function ProfileScreen() {
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
   const loadUserData = async () => {
     try {
       const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
@@ -61,6 +57,11 @@ export default function ProfileScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setTimeout(() => loadUserData(), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveUserData = async () => {
     try {

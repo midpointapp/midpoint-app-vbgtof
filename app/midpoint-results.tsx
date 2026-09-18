@@ -69,10 +69,6 @@ export default function MidpointResultsScreen() {
   const [midpointAddress, setMidpointAddress] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadCurrentUserName();
-  }, []);
-
   const loadCurrentUserName = async () => {
     try {
       const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
@@ -82,6 +78,34 @@ export default function MidpointResultsScreen() {
       }
     } catch (error) {
       console.error('Error loading current user name:', error);
+    }
+  };
+
+  useEffect(() => {
+    setTimeout(() => loadCurrentUserName(), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+
+      if (results && results.length > 0) {
+        const address = results[0];
+        const parts = [
+          address?.streetNumber,
+          address?.street,
+          address?.city,
+          address?.region,
+          address?.postalCode,
+        ].filter(Boolean);
+
+        const formattedAddress = parts.join(', ');
+        console.log('[MidpointResults] Midpoint address:', formattedAddress);
+        setMidpointAddress(formattedAddress || null);
+      }
+    } catch (err) {
+      console.error('[MidpointResults] Error reverse geocoding:', err);
     }
   };
 
@@ -165,8 +189,10 @@ export default function MidpointResultsScreen() {
       return;
     }
 
-    loadMeetPoint();
-    subscribeToMeetPoint();
+    setTimeout(() => {
+      loadMeetPoint();
+      subscribeToMeetPoint();
+    }, 0);
 
     return () => {
       if (channelRef.current) {
@@ -175,29 +201,6 @@ export default function MidpointResultsScreen() {
       }
     };
   }, [meetPointId, loadMeetPoint, subscribeToMeetPoint, router]);
-
-  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
-    try {
-      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-
-      if (results && results.length > 0) {
-        const address = results[0];
-        const parts = [
-          address?.streetNumber,
-          address?.street,
-          address?.city,
-          address?.region,
-          address?.postalCode,
-        ].filter(Boolean);
-
-        const formattedAddress = parts.join(', ');
-        console.log('Midpoint address:', formattedAddress);
-        setMidpointAddress(formattedAddress || null);
-      }
-    } catch (error) {
-      console.error('Error reverse geocoding midpoint:', error);
-    }
-  };
 
   const handleSelectPlace = async (place: Place) => {
     if (!meetPoint) {

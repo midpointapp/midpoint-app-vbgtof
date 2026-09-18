@@ -32,11 +32,6 @@ export default function MeetNowScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => getCurrentLocation(), 500);
-    return () => clearTimeout(timer);
-  }, []);
-
   async function getCurrentLocation() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -59,6 +54,12 @@ export default function MeetNowScreen() {
       Alert.alert('Location Error', 'Unable to get your location.');
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => getCurrentLocation(), 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleCreateSession() {
     if (!location) {

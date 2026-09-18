@@ -168,7 +168,8 @@ export default function ReceiverSessionScreen() {
   }, [id, token, loadPlaces, captureReceiverLocation]);
 
   useEffect(() => {
-    loadSession();
+    setTimeout(() => loadSession(), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSession]);
 
   // Realtime subscription for session updates

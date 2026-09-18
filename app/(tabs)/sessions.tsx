@@ -47,10 +47,6 @@ export default function SessionsScreen() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
-
   const fetchSessions = async () => {
     console.log('[Sessions] Fetching sessions from Supabase');
     try {
@@ -79,6 +75,11 @@ export default function SessionsScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSessions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const activeSessions = sessions.filter((s) => s.status === 'active');
   const completedSessions = sessions.filter((s) => s.status === 'completed');

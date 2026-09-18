@@ -71,6 +71,29 @@ export default function MeetSessionScreen() {
   console.log('[MeetSession] URL params:', JSON.stringify(params, null, 2));
   console.log('[MeetSession] meetPointId from params:', meetPointId);
 
+  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
+    try {
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+
+      if (results && results.length > 0) {
+        const address = results[0];
+        const parts = [
+          address?.streetNumber,
+          address?.street,
+          address?.city,
+          address?.region,
+          address?.postalCode,
+        ].filter(Boolean);
+
+        const formattedAddress = parts.join(', ');
+        console.log('[MeetSession] Midpoint address:', formattedAddress);
+        setMidpointAddress(formattedAddress || null);
+      }
+    } catch (err) {
+      console.error('[MeetSession] Error reverse geocoding:', err);
+    }
+  };
+
   const loadMeetPoint = useCallback(async () => {
     try {
       console.log('[MeetSession] Fetching MeetPoint from Supabase with ID:', meetPointId);
@@ -169,14 +192,18 @@ export default function MeetSessionScreen() {
   useEffect(() => {
     if (!meetPointId) {
       console.error('[MeetSession] ERROR: No meetPointId provided in URL params');
-      setError('invalid');
-      setLoading(false);
+      setTimeout(() => {
+        setError('invalid');
+        setLoading(false);
+      }, 0);
       return;
     }
 
     console.log('[MeetSession] Valid meetPointId detected, loading MeetPoint...');
-    loadMeetPoint();
-    subscribeToMeetPoint();
+    setTimeout(() => {
+      loadMeetPoint();
+      subscribeToMeetPoint();
+    }, 0);
 
     return () => {
       if (channelRef.current) {
@@ -186,29 +213,6 @@ export default function MeetSessionScreen() {
       }
     };
   }, [meetPointId, loadMeetPoint, subscribeToMeetPoint]);
-
-  const reverseGeocodeMidpoint = async (latitude: number, longitude: number) => {
-    try {
-      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-
-      if (results && results.length > 0) {
-        const address = results[0];
-        const parts = [
-          address?.streetNumber,
-          address?.street,
-          address?.city,
-          address?.region,
-          address?.postalCode,
-        ].filter(Boolean);
-
-        const formattedAddress = parts.join(', ');
-        console.log('[MeetSession] Midpoint address:', formattedAddress);
-        setMidpointAddress(formattedAddress || null);
-      }
-    } catch (err) {
-      console.error('[MeetSession] Error reverse geocoding:', err);
-    }
-  };
 
   const handleSelectPlace = async (place: Place) => {
     if (!meetPoint) return;

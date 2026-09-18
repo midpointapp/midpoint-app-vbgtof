@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   background: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   indicator: {
     position: 'absolute',

@@ -105,65 +105,109 @@ export default function SessionScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!paramsReady) return;
-    if (!sessionId) {
-      console.log('[Session] No sessionId after params settled — showing error');
-      setError('Invalid session link. The URL is missing the session ID. Please check the link and try again.');
-      setLoading(false);
-      return;
+  const loadSessionPlaces = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('session_places')
+        .select('*')
+        .eq('session_id', id)
+        .order('rank', { ascending: true });
+
+      if (error) return;
+
+      setPlaces(data || []);
+    } catch {
+      // silently ignore
     }
-    console.log('[Session] Loading session:', sessionId);
-    loadSession(sessionId, token || null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsReady, sessionId, token]);
+  };
 
-  useEffect(() => {
-    if (!sessionId) return;
+  const generatePlaces = async (id: string, sessionData: MeetSession) => {
+    if (!sessionData.sender_lat || !sessionData.receiver_lat) return;
+    if (
+      typeof sessionData.sender_lat !== 'number' ||
+      typeof sessionData.sender_lng !== 'number' ||
+      typeof sessionData.receiver_lat !== 'number' ||
+      typeof sessionData.receiver_lng !== 'number'
+    ) return;
+    if (
+      isNaN(sessionData.sender_lat) || isNaN(sessionData.sender_lng) ||
+      isNaN(sessionData.receiver_lat) || isNaN(sessionData.receiver_lng)
+    ) return;
 
-    const channel = supabase
-      .channel(`session:${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'meet_sessions',
-          filter: `id=eq.${sessionId}`,
-        },
-        (payload) => {
-          console.log('[Session] Realtime update received:', payload.eventType);
-          if (payload.new) {
-            const updatedSession = payload.new as MeetSession;
-            setSession(updatedSession);
+    try {
+      const generatedPlaces = await generateMidpointPlaces(
+        sessionData.sender_lat,
+        sessionData.sender_lng,
+        sessionData.receiver_lat,
+        sessionData.receiver_lng,
+        sessionData.type
+      );
 
-            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSenderRef.current) {
-              generatePlaces(sessionId!, updatedSession);
-            }
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_places',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        async () => {
-          await loadSessionPlaces(sessionId);
-        }
-      )
-      .subscribe();
+      if (generatedPlaces.length === 0) {
+        await supabase
+          .from('meet_sessions')
+          .update({ status: 'no_places_found' })
+          .eq('id', id);
+        return;
+      }
 
-    subscriptionRef.current = channel;
+      const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
+        session_id: id,
+        place_id: place.placeId || `place_${index}`,
+        name: place.name,
+        address: place.address || '',
+        lat: place.latitude,
+        lng: place.longitude,
+        rank: index + 1,
+      }));
 
-    return () => {
-      channel.unsubscribe();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+      const { error } = await supabase
+        .from('session_places')
+        .insert(placesToInsert);
+
+      if (error) throw error;
+
+      placesGeneratedRef.current = true;
+
+      await loadSessionPlaces(id);
+    } catch {
+      placesGeneratedRef.current = false;
+    }
+  };
+
+  const captureReceiverLocation = async (id: string, sessionData: MeetSession) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Required',
+          'Please enable location access in Settings so we can find your midpoint.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+
+      const { error } = await supabase
+        .from('meet_sessions')
+        .update({
+          receiver_lat: location.coords.latitude,
+          receiver_lng: location.coords.longitude,
+          status: 'connected',
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      // Sender's realtime subscription will detect receiver_lat and trigger place generation
+    } catch {
+      Alert.alert('Error', 'Failed to capture location');
+    }
+  };
 
   const loadSession = async (id: string, accessToken: string | null) => {
     try {
@@ -226,112 +270,67 @@ export default function SessionScreen() {
     }
   };
 
-  const loadSessionPlaces = async (id: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('session_places')
-        .select('*')
-        .eq('session_id', id)
-        .order('rank', { ascending: true });
-
-      if (error) return;
-
-      setPlaces(data || []);
-    } catch {
-      // silently ignore
+  useEffect(() => {
+    if (!paramsReady) return;
+    if (!sessionId) {
+      console.log('[Session] No sessionId after params settled — showing error');
+      setTimeout(() => {
+        setError('Invalid session link. The URL is missing the session ID. Please check the link and try again.');
+        setLoading(false);
+      }, 0);
+      return;
     }
-  };
+    console.log('[Session] Loading session:', sessionId);
+    setTimeout(() => loadSession(sessionId, token || null), 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsReady, sessionId, token]);
 
-  const captureReceiverLocation = async (id: string, sessionData: MeetSession) => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+  useEffect(() => {
+    if (!sessionId) return;
 
-      if (status !== 'granted') {
-        Alert.alert(
-          'Location Required',
-          'Please enable location access in Settings so we can find your midpoint.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
-        return;
-      }
+    const channel = supabase
+      .channel(`session:${sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'meet_sessions',
+          filter: `id=eq.${sessionId}`,
+        },
+        (payload) => {
+          console.log('[Session] Realtime update received:', payload.eventType);
+          if (payload.new) {
+            const updatedSession = payload.new as MeetSession;
+            setSession(updatedSession);
 
-      const location = await Location.getCurrentPositionAsync({});
+            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSenderRef.current) {
+              generatePlaces(sessionId!, updatedSession);
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'session_places',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        async () => {
+          await loadSessionPlaces(sessionId);
+        }
+      )
+      .subscribe();
 
-      const { error } = await supabase
-        .from('meet_sessions')
-        .update({
-          receiver_lat: location.coords.latitude,
-          receiver_lng: location.coords.longitude,
-          status: 'connected',
-        })
-        .eq('id', id);
+    subscriptionRef.current = channel;
 
-      if (error) throw error;
-      // Sender's realtime subscription will detect receiver_lat and trigger place generation
-    } catch {
-      Alert.alert('Error', 'Failed to capture location');
-    }
-  };
-
-  const generatePlaces = async (id: string, sessionData: MeetSession) => {
-    if (!sessionData.sender_lat || !sessionData.receiver_lat) return;
-    if (
-      typeof sessionData.sender_lat !== 'number' ||
-      typeof sessionData.sender_lng !== 'number' ||
-      typeof sessionData.receiver_lat !== 'number' ||
-      typeof sessionData.receiver_lng !== 'number'
-    ) return;
-    if (
-      isNaN(sessionData.sender_lat) || isNaN(sessionData.sender_lng) ||
-      isNaN(sessionData.receiver_lat) || isNaN(sessionData.receiver_lng)
-    ) return;
-
-    try {
-      const generatedPlaces = await generateMidpointPlaces(
-        sessionData.sender_lat,
-        sessionData.sender_lng,
-        sessionData.receiver_lat,
-        sessionData.receiver_lng,
-        sessionData.type
-      );
-
-      if (generatedPlaces.length === 0) {
-        // Mark session as no_places_found so UI can show a message
-        await supabase
-          .from('meet_sessions')
-          .update({ status: 'no_places_found' })
-          .eq('id', id);
-        return;
-      }
-
-      const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
-        session_id: id,
-        place_id: place.placeId || `place_${index}`,
-        name: place.name,
-        address: place.address || '',
-        lat: place.latitude,
-        lng: place.longitude,
-        rank: index + 1,
-      }));
-
-      const { error } = await supabase
-        .from('session_places')
-        .insert(placesToInsert);
-
-      if (error) throw error;
-
-      // Only mark as generated AFTER successful insert
-      placesGeneratedRef.current = true;
-
-      await loadSessionPlaces(id);
-    } catch {
-      // Reset ref so realtime can retry
-      placesGeneratedRef.current = false;
-    }
-  };
+    return () => {
+      channel.unsubscribe();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   const handleProposePlace = async (place: SessionPlace) => {
     if (!session) return;
