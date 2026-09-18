@@ -2,84 +2,898 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>MidPoint Meet – Join Session</title>
   <meta name="description" content="You've been invited to find a midpoint meeting place." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #3F51B5 0%, #1a237e 100%);
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo: #3F51B5;
+      --indigo-dark: #303f9f;
+      --indigo-deeper: #1a237e;
+      --indigo-light: #e8eaf6;
+      --green: #43a047;
+      --amber: #f59e0b;
+      --red: #e53935;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --white: #ffffff;
+      --card-shadow: 0 4px 24px rgba(63,81,181,0.13), 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(160deg, #3F51B5 0%, #1a237e 60%, #0d1547 100%);
       min-height: 100vh;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: env(safe-area-inset-top, 24px) 16px env(safe-area-inset-bottom, 24px);
+      padding-top: max(env(safe-area-inset-top, 0px), 24px);
+      padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+    }
+
+    .header {
+      width: 100%;
+      max-width: 480px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      padding: 24px;
+      gap: 10px;
+      padding: 16px 0 20px;
     }
+    .header-logo { font-size: 28px; }
+    .header-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.95);
+      letter-spacing: -0.3px;
+    }
+
     .card {
-      background: #fff;
+      background: var(--white);
       border-radius: 24px;
-      padding: 40px 32px;
-      max-width: 400px;
+      padding: 32px 24px;
+      max-width: 480px;
       width: 100%;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      box-shadow: var(--card-shadow);
+      margin-bottom: 16px;
     }
-    .icon { font-size: 64px; margin-bottom: 16px; }
-    h1 { font-size: 26px; font-weight: 700; color: #1a237e; margin-bottom: 8px; }
-    .subtitle { font-size: 16px; color: #555; margin-bottom: 32px; line-height: 1.5; }
+
+    .spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid var(--indigo-light);
+      border-top-color: var(--indigo);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-text {
+      font-size: 15px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .category-hero {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .category-icon {
+      font-size: 56px;
+      line-height: 1;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .category-label {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--indigo);
+      margin-bottom: 6px;
+    }
+    .invite-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      letter-spacing: -0.3px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+    .status-badge.waiting { background: #fff8e1; color: #b45309; }
+    .status-badge.connected { background: #e8f5e9; color: #2e7d32; }
+    .status-badge.proposed { background: #e8eaf6; color: var(--indigo-dark); }
+    .status-badge.confirmed { background: #e8f5e9; color: #2e7d32; }
+    .status-badge.expired { background: #fce4ec; color: #c62828; }
+    .status-badge.no_places { background: #fff3e0; color: #e65100; }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0;
+    }
+
+    .location-section {
+      text-align: center;
+      padding: 8px 0;
+    }
+    .location-icon { font-size: 40px; margin-bottom: 12px; }
+    .location-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .location-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
     .btn {
       display: block;
-      background: #3F51B5;
-      color: #fff;
-      font-size: 18px;
-      font-weight: 700;
-      padding: 18px 32px;
+      width: 100%;
+      padding: 15px 20px;
       border-radius: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      border: none;
       text-decoration: none;
-      margin-bottom: 16px;
-      transition: background 0.2s;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
     }
-    .btn:hover { background: #303f9f; }
-    .error { color: #c62828; font-size: 15px; margin-top: 16px; }
-    .note { font-size: 13px; color: #888; margin-top: 20px; }
+    .btn:active { opacity: 0.85; transform: scale(0.98); }
+    .btn-primary {
+      background: var(--indigo);
+      color: var(--white);
+    }
+    .btn-primary:hover { background: var(--indigo-dark); }
+    .btn-directions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--indigo);
+      color: var(--white);
+      text-decoration: none;
+      transition: opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-directions:active { opacity: 0.8; }
+
+    .places-section { }
+    .places-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .place-card {
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+    .place-card:last-child { margin-bottom: 0; }
+    .place-card.highlighted {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(63,81,181,0.12);
+    }
+    .place-card.confirmed-card {
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(67,160,71,0.12);
+      background: #f1f8f1;
+    }
+    .place-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .place-tag.suggested { background: var(--indigo-light); color: var(--indigo-dark); }
+    .place-tag.confirmed-tag { background: #c8e6c9; color: #1b5e20; }
+    .place-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+    .place-address {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    .waiting-section {
+      text-align: center;
+      padding: 8px 0;
+    }
+    .waiting-icon { font-size: 40px; margin-bottom: 12px; }
+    .waiting-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .waiting-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .pulse-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 16px;
+    }
+    .pulse-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--indigo);
+      animation: pulse-dot 1.4s ease-in-out infinite;
+    }
+    .pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+    .pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse-dot {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+
+    .error-section {
+      text-align: center;
+      padding: 8px 0;
+    }
+    .error-icon { font-size: 48px; margin-bottom: 12px; }
+    .error-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .error-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .join-code-card {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 16px;
+      padding: 16px 20px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .join-code-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.65);
+      margin-bottom: 6px;
+    }
+    .join-code-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .app-cta {
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      padding: 4px 0 8px;
+    }
+    .app-cta-text {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 10px;
+    }
+    .btn-app {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: var(--white);
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-app:active { background: rgba(255,255,255,0.25); }
+
+    .realtime-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 16px;
+      justify-content: center;
+    }
+    .realtime-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: realtime-pulse 2s ease-in-out infinite;
+    }
+    @keyframes realtime-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .hidden { display: none !important; }
+    .mt-16 { margin-top: 16px; }
+    .mt-8 { margin-top: 8px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon">📍</div>
-    <h1>MidPoint Meet</h1>
-    <p class="subtitle" id="subtitle">You've been invited to find a midpoint meeting place. Tap below to open the app.</p>
-    <a class="btn" id="openBtn" href="#">Open MidPoint Meet</a>
-    <p class="note">Make sure MidPoint Meet is installed on your device.</p>
-    <p class="error" id="errorMsg"></p>
+
+  <div class="header">
+    <span class="header-logo">📍</span>
+    <span class="header-title">MidPoint Meet</span>
   </div>
+
+  <div class="card" id="mainCard">
+    <div id="stateLoading" class="spinner-wrap">
+      <div class="spinner"></div>
+      <p class="spinner-text">Loading your invitation…</p>
+    </div>
+
+    <div id="stateError" class="error-section hidden">
+      <div class="error-icon" id="errorIcon">⚠️</div>
+      <h2 class="error-title" id="errorTitle">Something went wrong</h2>
+      <p class="error-desc" id="errorDesc">Please ask the sender to share the link again.</p>
+    </div>
+
+    <div id="stateSession" class="hidden">
+
+      <div class="category-hero">
+        <span class="category-icon" id="categoryIcon">📍</span>
+        <div class="category-label" id="categoryLabel">Meeting</div>
+        <h1 class="invite-title" id="inviteTitle">You've been invited to meet</h1>
+        <div id="statusBadgeWrap" style="margin-top:10px;">
+          <span class="status-badge" id="statusBadge">
+            <span class="status-dot"></span>
+            <span id="statusText">Loading…</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="sectionLocation" class="location-section hidden">
+        <div class="location-icon">🗺️</div>
+        <h2 class="location-title">Share your location</h2>
+        <p class="location-desc">We need your location to find the best midpoint between you and the sender.</p>
+        <button class="btn btn-primary" id="btnShareLocation" onclick="requestLocation()">
+          📍 Share My Location
+        </button>
+        <p id="locationError" class="error-desc mt-8 hidden" style="color:#c62828;"></p>
+      </div>
+
+      <div id="sectionWaiting" class="waiting-section hidden">
+        <div class="waiting-icon">🔍</div>
+        <h2 class="waiting-title">Finding meeting spots…</h2>
+        <p class="waiting-desc">We're calculating the midpoint and searching for nearby places. This usually takes a few seconds.</p>
+        <div class="pulse-dots">
+          <div class="pulse-dot"></div>
+          <div class="pulse-dot"></div>
+          <div class="pulse-dot"></div>
+        </div>
+      </div>
+
+      <div id="sectionNoPlaces" class="error-section hidden">
+        <div class="error-icon">😕</div>
+        <h2 class="error-title">No spots found</h2>
+        <p class="error-desc">No places were found near your midpoint. Ask the sender to try a different category.</p>
+      </div>
+
+      <div id="sectionPlaces" class="places-section hidden">
+        <p class="places-title" id="placesTitle">Suggested spots</p>
+        <div id="placesList"></div>
+        <div class="realtime-indicator">
+          <div class="realtime-dot"></div>
+          <span>Live — updates automatically</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="join-code-card hidden" id="joinCodeCard">
+    <div class="join-code-label">Or join in the app with code</div>
+    <div class="join-code-value" id="joinCodeValue">—</div>
+  </div>
+
+  <div class="app-cta hidden" id="appCta">
+    <p class="app-cta-text">Have the app? Open it for the full experience</p>
+    <a class="btn-app" id="btnOpenApp" href="#">
+      <span>📱</span>
+      <span>Open in MidPoint Meet</span>
+    </a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
   <script>
-    (function () {
+  (function () {
+    'use strict';
+
+    var SUPABASE_URL = 'https://kjlbcgjvruyrqvkdtljz.supabase.co';
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtqbGJjZ2p2cnV5cnF2a2R0bGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0NDQ2MDksImV4cCI6MjA5OTAyMDYwOX0.8qki0RzmMA7V9cvcY35XtXbUp5X-y5EtOtcFqrckRVA';
+
+    var CATEGORY_MAP = {
+      coffee:      { icon: '☕', label: 'Coffee' },
+      food:        { icon: '🍔', label: 'Food' },
+      marketplace: { icon: '🛍️', label: 'Marketplace' },
+      gas:         { icon: '⛽', label: 'Gas Station' },
+      park:        { icon: '🌳', label: 'Park' },
+      police:      { icon: '🚔', label: 'Police Station' }
+    };
+
+    var STATUS_CONFIG = {
+      waiting_for_receiver: { cls: 'waiting',   text: 'Waiting for your location' },
+      connected:            { cls: 'connected', text: 'Location shared — finding spots' },
+      proposed:             { cls: 'proposed',  text: 'Spot suggested by sender' },
+      confirmed:            { cls: 'confirmed', text: 'Meeting spot confirmed!' },
+      expired:              { cls: 'expired',   text: 'Session expired' },
+      no_places_found:      { cls: 'no_places', text: 'No spots found nearby' }
+    };
+
+    var supabaseClient = null;
+    var sessionId = null;
+    var token = null;
+    var sessionData = null;
+    var realtimeChannel = null;
+
+    function init() {
       var params = new URLSearchParams(window.location.search);
-      var sessionId = params.get('sessionId');
-      var token = params.get('token');
-      var btn = document.getElementById('openBtn');
-      var errorMsg = document.getElementById('errorMsg');
+      sessionId = params.get('sessionId');
+      token = params.get('token');
 
       if (!sessionId || !token) {
-        btn.style.display = 'none';
-        errorMsg.textContent = 'Invalid invite link — missing session ID or token. Please ask the sender to share the link again.';
+        showError('⚠️', 'Invalid invite link', 'This link is missing required information. Please ask the sender to share the link again.');
+        return;
+      }
+
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch (e) {
+        showError('⚠️', 'Connection error', 'Could not connect to the server. Please check your internet connection and try again.');
         return;
       }
 
       var deepLink = 'midpointmeet://session?sessionId=' + encodeURIComponent(sessionId) + '&token=' + encodeURIComponent(token) + '&isSender=false';
-      btn.href = deepLink;
+      var btnOpenApp = document.getElementById('btnOpenApp');
+      if (btnOpenApp) {
+        btnOpenApp.href = deepLink;
+        btnOpenApp.addEventListener('click', function (e) {
+          e.preventDefault();
+          window.location.href = deepLink;
+        });
+      }
 
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        window.location.href = deepLink;
-        // Fallback: if app not installed after 2s, show store link
-        setTimeout(function () {
-          document.getElementById('subtitle').textContent = "Couldn't open the app. Make sure MidPoint Meet is installed.";
-        }, 2000);
+      loadSession();
+    }
+
+    function loadSession() {
+      supabaseClient
+        .from('meet_sessions')
+        .select('id, type, status, join_code, proposed_place_id, confirmed_place_id, invite_token, expires_at, receiver_lat, receiver_lng')
+        .eq('id', sessionId)
+        .single()
+        .then(function (result) {
+          var data = result.data;
+          var error = result.error;
+
+          if (error || !data) {
+            showError('🔗', 'Link not found', 'This invite link is invalid or has been removed. Please ask the sender to share a new link.');
+            return;
+          }
+
+          if (data.invite_token !== token) {
+            showError('🔒', 'Invalid token', 'This invite link is not valid. Please ask the sender to share the correct link.');
+            return;
+          }
+
+          if (data.expires_at && new Date(data.expires_at) < new Date()) {
+            showError('⏰', 'Session expired', 'This meeting session has expired. Ask the sender to start a new session.');
+            return;
+          }
+
+          if (data.status === 'expired') {
+            showError('⏰', 'Session expired', 'This meeting session has expired. Ask the sender to start a new session.');
+            return;
+          }
+
+          sessionData = data;
+          renderSession(data);
+          subscribeRealtime();
+        })
+        .catch(function () {
+          showError('⚠️', 'Connection error', 'Could not load the session. Please check your connection and try again.');
+        });
+    }
+
+    function renderSession(data) {
+      show('stateSession');
+      hide('stateLoading');
+
+      var cat = CATEGORY_MAP[data.type] || { icon: '📍', label: data.type || 'Meeting' };
+      setText('categoryIcon', cat.icon);
+      setText('categoryLabel', cat.label);
+      setText('inviteTitle', "You've been invited to meet for " + cat.label);
+
+      var sc = STATUS_CONFIG[data.status] || { cls: 'waiting', text: data.status };
+      var badge = document.getElementById('statusBadge');
+      badge.className = 'status-badge ' + sc.cls;
+      setText('statusText', sc.text);
+
+      if (data.join_code) {
+        setText('joinCodeValue', data.join_code);
+        show('joinCodeCard');
+      }
+
+      show('appCta');
+      renderContentSection(data);
+    }
+
+    function renderContentSection(data) {
+      hide('sectionLocation');
+      hide('sectionWaiting');
+      hide('sectionNoPlaces');
+      hide('sectionPlaces');
+
+      var status = data.status;
+
+      if (status === 'no_places_found') {
+        show('sectionNoPlaces');
+        return;
+      }
+
+      if (status === 'waiting_for_receiver') {
+        if (!data.receiver_lat) {
+          show('sectionLocation');
+        } else {
+          show('sectionWaiting');
+        }
+        return;
+      }
+
+      if (status === 'connected') {
+        loadPlaces(data);
+        show('sectionWaiting');
+        return;
+      }
+
+      if (status === 'proposed' || status === 'confirmed') {
+        loadPlaces(data);
+        return;
+      }
+
+      show('sectionWaiting');
+    }
+
+    function loadPlaces(data) {
+      supabaseClient
+        .from('session_places')
+        .select('id, place_id, name, address, lat, lng, rank')
+        .eq('session_id', sessionId)
+        .order('rank', { ascending: true })
+        .limit(3)
+        .then(function (result) {
+          var places = result.data || [];
+          if (places.length === 0) {
+            if (data.status !== 'connected') {
+              show('sectionWaiting');
+            }
+            return;
+          }
+          renderPlaces(places, data);
+        })
+        .catch(function () {
+          show('sectionWaiting');
+        });
+    }
+
+    function renderPlaces(places, data) {
+      var list = document.getElementById('placesList');
+      list.innerHTML = '';
+
+      var status = data.status;
+      var proposedId = data.proposed_place_id;
+      var confirmedId = data.confirmed_place_id;
+
+      var titleEl = document.getElementById('placesTitle');
+      if (status === 'confirmed') {
+        titleEl.textContent = '✅ Confirmed meeting spot';
+      } else if (status === 'proposed') {
+        titleEl.textContent = 'Suggested spots';
+      } else {
+        titleEl.textContent = 'Nearby spots';
+      }
+
+      var rendered = 0;
+      places.forEach(function (place) {
+        var isConfirmed = confirmedId && place.place_id === confirmedId;
+        var isProposed = proposedId && place.place_id === proposedId;
+
+        if (status === 'confirmed' && !isConfirmed) return;
+
+        var card = document.createElement('div');
+        card.className = 'place-card' + (isConfirmed ? ' confirmed-card' : (isProposed ? ' highlighted' : ''));
+
+        var tagHtml = '';
+        if (isConfirmed) {
+          tagHtml = '<span class="place-tag confirmed-tag">✅ Confirmed</span>';
+        } else if (isProposed) {
+          tagHtml = '<span class="place-tag suggested">⭐ Sender suggested this spot</span>';
+        }
+
+        var directionsUrl = '';
+        if (place.lat && place.lng) {
+          directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + place.lat + ',' + place.lng;
+        } else if (place.address) {
+          directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(place.address);
+        }
+
+        var directionsHtml = directionsUrl
+          ? '<a class="btn-directions" href="' + directionsUrl + '" target="_blank" rel="noopener">🗺️ Get Directions</a>'
+          : '';
+
+        card.innerHTML =
+          tagHtml +
+          '<div class="place-name">' + escapeHtml(place.name || 'Unknown place') + '</div>' +
+          '<div class="place-address">' + escapeHtml(place.address || '') + '</div>' +
+          directionsHtml;
+
+        list.appendChild(card);
+        rendered++;
       });
-    })();
+
+      if (status === 'confirmed' && rendered === 0) {
+        places.forEach(function (place) {
+          var card = document.createElement('div');
+          card.className = 'place-card';
+          var directionsUrl = place.lat && place.lng
+            ? 'https://www.google.com/maps/dir/?api=1&destination=' + place.lat + ',' + place.lng
+            : '';
+          card.innerHTML =
+            '<div class="place-name">' + escapeHtml(place.name || 'Unknown place') + '</div>' +
+            '<div class="place-address">' + escapeHtml(place.address || '') + '</div>' +
+            (directionsUrl ? '<a class="btn-directions" href="' + directionsUrl + '" target="_blank" rel="noopener">🗺️ Get Directions</a>' : '');
+          list.appendChild(card);
+        });
+      }
+
+      hide('sectionWaiting');
+      hide('sectionLocation');
+      show('sectionPlaces');
+    }
+
+    window.requestLocation = function () {
+      var btn = document.getElementById('btnShareLocation');
+      btn.disabled = true;
+      btn.textContent = '⏳ Getting location…';
+      hide('locationError');
+
+      if (!navigator.geolocation) {
+        showLocationError('Your browser does not support geolocation. Please use a modern browser.');
+        btn.disabled = false;
+        btn.textContent = '📍 Share My Location';
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          var lat = pos.coords.latitude;
+          var lng = pos.coords.longitude;
+          saveReceiverLocation(lat, lng);
+        },
+        function (err) {
+          btn.disabled = false;
+          btn.textContent = '📍 Share My Location';
+          var msg = 'Could not get your location. ';
+          if (err.code === 1) {
+            msg += 'Location permission was denied. Please allow location access in your browser settings and try again.';
+          } else if (err.code === 2) {
+            msg += 'Location unavailable. Please try again.';
+          } else {
+            msg += 'Please try again.';
+          }
+          showLocationError(msg);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    };
+
+    function saveReceiverLocation(lat, lng) {
+      if (sessionData && sessionData.receiver_lat !== null && sessionData.receiver_lat !== undefined) {
+        sessionData.receiver_lat = lat;
+        sessionData.receiver_lng = lng;
+        sessionData.status = 'connected';
+        renderContentSection(sessionData);
+        return;
+      }
+
+      supabaseClient
+        .from('meet_sessions')
+        .update({ receiver_lat: lat, receiver_lng: lng, status: 'connected' })
+        .eq('id', sessionId)
+        .then(function (result) {
+          if (result.error) {
+            showLocationError('Could not save your location. Please try again.');
+            var btn = document.getElementById('btnShareLocation');
+            btn.disabled = false;
+            btn.textContent = '📍 Share My Location';
+            return;
+          }
+          sessionData.receiver_lat = lat;
+          sessionData.receiver_lng = lng;
+          sessionData.status = 'connected';
+          var sc = STATUS_CONFIG['connected'];
+          var badge = document.getElementById('statusBadge');
+          badge.className = 'status-badge ' + sc.cls;
+          setText('statusText', sc.text);
+          hide('sectionLocation');
+          show('sectionWaiting');
+        })
+        .catch(function () {
+          showLocationError('Could not save your location. Please try again.');
+          var btn = document.getElementById('btnShareLocation');
+          btn.disabled = false;
+          btn.textContent = '📍 Share My Location';
+        });
+    }
+
+    function showLocationError(msg) {
+      var el = document.getElementById('locationError');
+      el.textContent = msg;
+      show('locationError');
+    }
+
+    function subscribeRealtime() {
+      if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+      }
+
+      realtimeChannel = supabaseClient
+        .channel('session-' + sessionId)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'meet_sessions',
+            filter: 'id=eq.' + sessionId
+          },
+          function (payload) {
+            var newData = payload.new;
+            if (!newData) return;
+            sessionData = Object.assign({}, sessionData, newData);
+            var sc = STATUS_CONFIG[sessionData.status] || { cls: 'waiting', text: sessionData.status };
+            var badge = document.getElementById('statusBadge');
+            badge.className = 'status-badge ' + sc.cls;
+            setText('statusText', sc.text);
+            renderContentSection(sessionData);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'session_places',
+            filter: 'session_id=eq.' + sessionId
+          },
+          function () {
+            var status = sessionData ? sessionData.status : '';
+            if (status === 'proposed' || status === 'confirmed' || status === 'connected') {
+              loadPlaces(sessionData);
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    function showError(icon, title, desc) {
+      hide('stateLoading');
+      hide('stateSession');
+      setText('errorIcon', icon);
+      setText('errorTitle', title);
+      setText('errorDesc', desc);
+      show('stateError');
+    }
+
+    function show(id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.remove('hidden');
+    }
+    function hide(id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+    function setText(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+
+  })();
   </script>
 </body>
 </html>
