@@ -7,12 +7,6 @@ import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme, Alert } from "react-native";
 import { useNetworkState } from "expo-network";
-import {
-  DarkTheme,
-  DefaultTheme,
-  Theme,
-  ThemeProvider,
-} from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 
@@ -47,40 +41,12 @@ export default function RootLayout() {
     return null;
   }
 
-  const CustomDefaultTheme: Theme = {
-    ...DefaultTheme,
-    dark: false,
-    colors: {
-      primary: "rgb(63, 81, 181)",
-      background: "rgb(245, 245, 245)",
-      card: "rgb(255, 255, 255)",
-      text: "rgb(33, 33, 33)",
-      border: "rgb(224, 224, 224)",
-      notification: "rgb(244, 67, 54)",
-    },
-  };
-
-  const CustomDarkTheme: Theme = {
-    ...DarkTheme,
-    colors: {
-      primary: "rgb(63, 81, 181)",
-      background: "rgb(18, 18, 18)",
-      card: "rgb(33, 33, 33)",
-      text: "rgb(255, 255, 255)",
-      border: "rgb(66, 66, 66)",
-      notification: "rgb(244, 67, 54)",
-    },
-  };
-
   return (
     <>
       <StatusBar style="auto" animated />
-      <ThemeProvider
-        value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
-      >
-        <WidgetProvider>
-          <GestureHandlerRootView>
-            <Stack>
+      <WidgetProvider>
+        <GestureHandlerRootView>
+          <Stack>
                 {/* CRITICAL FIX: Index route for root path handling */}
                 <Stack.Screen
                   name="index"
@@ -198,10 +164,9 @@ export default function RootLayout() {
                     title: "Help & Support",
                   }}
                 />
-              </Stack>
-          </GestureHandlerRootView>
-        </WidgetProvider>
-      </ThemeProvider>
+            </Stack>
+        </GestureHandlerRootView>
+      </WidgetProvider>
     </>
   );
 }

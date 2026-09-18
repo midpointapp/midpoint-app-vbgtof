@@ -1,30 +1,30 @@
 import React from "react";
 import { Pressable, StyleSheet, Alert } from "react-native";
 import { IconSymbol } from "@/components/IconSymbol";
-import { useTheme } from "@react-navigation/native";
+import { useThemeColors } from "@/styles/commonStyles";
 
 export function HeaderRightButton() {
-  const theme = useTheme();
+  const colors = useThemeColors();
 
   return (
     <Pressable
       onPress={() => Alert.alert("Not Implemented", "This feature is not implemented yet")}
       style={styles.headerButtonContainer}
     >
-      <IconSymbol ios_icon_name="plus" android_material_icon_name="add" color={theme.colors.primary} />
+      <IconSymbol ios_icon_name="plus" android_material_icon_name="add" color={colors.primary} />
     </Pressable>
   );
 }
 
 export function HeaderLeftButton() {
-  const theme = useTheme();
+  const colors = useThemeColors();
 
   return (
     <Pressable
       onPress={() => Alert.alert("Not Implemented", "This feature is not implemented yet")}
       style={styles.headerButtonContainer}
     >
-      <IconSymbol ios_icon_name="gear" android_material_icon_name="settings" color={theme.colors.primary} />
+      <IconSymbol ios_icon_name="gear" android_material_icon_name="settings" color={colors.primary} />
     </Pressable>
   );
 }
