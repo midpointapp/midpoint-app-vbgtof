@@ -1,28 +1,18 @@
-
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { createSessionAndSendInvite } from '@/utils/sessionUtils';
 import * as Location from 'expo-location';
 import { useThemeColors } from '@/styles/commonStyles';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ScrollView, 
-  Alert, 
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Linking } from 'react-native';
 
 const MEETUP_TYPES = [
-  { id: 'coffee', label: '☕ Coffee', icon: 'local-cafe' },
-  { id: 'food', label: '🍔 Food', icon: 'restaurant' },
-  { id: 'marketplace', label: '🛍️ Marketplace', icon: 'shopping-bag' },
-  { id: 'gas', label: '⛽ Gas Station', icon: 'local-gas-station' },
-  { id: 'park', label: '🌳 Park', icon: 'park' },
-  { id: 'police', label: '🚔 Police Station', icon: 'local-police' },
+  { id: 'coffee', label: 'Coffee', icon: 'local-cafe' },
+  { id: 'food', label: 'Food', icon: 'restaurant' },
+  { id: 'marketplace', label: 'Marketplace', icon: 'shopping-bag' },
+  { id: 'gas', label: 'Gas Station', icon: 'local-gas-station' },
+  { id: 'park', label: 'Park', icon: 'park' },
+  { id: 'police', label: 'Police Station', icon: 'local-police' },
 ];
 
 export default function MeetNowScreen() {
@@ -36,17 +26,12 @@ export default function MeetNowScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Location Required',
-          'Please enable location access in Settings to use this feature.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
+        Alert.alert('Location Required', 'Please enable location access in Settings to use this feature.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]);
         return;
       }
-
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
       console.log('[MeetNow] Location acquired');
@@ -66,7 +51,7 @@ export default function MeetNowScreen() {
       Alert.alert('Location Required', 'Please enable location services.');
       return;
     }
-
+    if (creatingSession) return;
     console.log('[MeetNow] Creating session, type:', selectedType);
     setCreatingSession(true);
     try {
@@ -75,7 +60,6 @@ export default function MeetNowScreen() {
         location.coords.latitude,
         location.coords.longitude
       );
-
       console.log('[MeetNow] Session created, navigating to session screen');
       router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}&isSender=true`);
     } catch (error: any) {
@@ -86,69 +70,35 @@ export default function MeetNowScreen() {
   }
 
   const locationReady = location !== null;
-  const buttonLabel = creatingSession
-    ? 'Creating...'
-    : !locationReady
-    ? 'Getting location...'
-    : 'Create & Send Invite';
-  const locationStatusText = locationReady ? '📍 Location ready' : '📍 Getting your location...';
-  const locationStatusColor = locationReady ? '#4CAF50' : colors.textSecondary;
+  const buttonLabel = creatingSession ? 'Creating...' : !locationReady ? 'Getting location...' : 'Create & Send Invite';
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            console.log('[MeetNow] Back button pressed');
-            router.back();
-          }}
-          style={styles.backButton}
-        >
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Meet Now</Text>
-      </View>
-
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Select Meeting Type</Text>
-
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>What kind of place would you like to meet?</Text>
       <View style={styles.typeGrid}>
         {MEETUP_TYPES.map((type) => (
           <TouchableOpacity
             key={type.id}
-            style={[
-              styles.typeCard,
-              { backgroundColor: colors.card },
-              selectedType === type.id && styles.typeCardSelected,
-            ]}
-            onPress={() => {
-              console.log('[MeetNow] Selected type:', type.id);
-              setSelectedType(type.id);
-            }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: selectedType === type.id }}
+            style={[styles.typeCard, { backgroundColor: colors.card }, selectedType === type.id && styles.typeCardSelected]}
+            onPress={() => setSelectedType(type.id)}
           >
-            <MaterialIcons
-              name={type.icon as any}
-              size={32}
-              color={selectedType === type.id ? '#007AFF' : colors.text}
-            />
-            <Text style={[styles.typeLabel, { color: colors.text }]}>{type.label}</Text>
+            <MaterialIcons name={type.icon as any} size={30} color={selectedType === type.id ? '#4055AD' : colors.text} />
+            <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.typeLabel, { color: colors.text }]}>{type.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      <Text style={[styles.locationStatus, { color: locationStatusColor }]}>
-        {locationStatusText}
+      <Text style={[styles.locationStatus, { color: locationReady ? '#388E3C' : colors.textSecondary }]}>
+        {locationReady ? '📍 Location ready' : '📍 Getting your location...'}
       </Text>
-
       <TouchableOpacity
         style={[styles.createButton, (creatingSession || !locationReady) && styles.createButtonDisabled]}
         onPress={handleCreateSession}
         disabled={creatingSession || !locationReady}
       >
-        {creatingSession ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.createButtonText}>{buttonLabel}</Text>
-        )}
+        {creatingSession ? <ActivityIndicator color="#fff" /> : <Text style={styles.createButtonText}>{buttonLabel}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -157,16 +107,14 @@ export default function MeetNowScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  backButton: { marginRight: 15 },
-  title: { fontSize: 24, fontWeight: 'bold' },
-  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 15 },
-  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  typeCard: { width: '30%', padding: 18, borderRadius: 12, alignItems: 'center' },
-  typeCardSelected: { borderWidth: 2, borderColor: '#007AFF' },
-  typeLabel: { fontSize: 13, marginTop: 8, textAlign: 'center' },
-  locationStatus: { fontSize: 13, marginBottom: 20, textAlign: 'center' },
-  createButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 12, alignItems: 'center' },
+  sectionTitle: { fontSize: 22, fontWeight: '700', marginBottom: 6 },
+  subtitle: { fontSize: 14, marginBottom: 22 },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
+  typeCard: { width: '30%', flexGrow: 1, minWidth: 0, minHeight: 116, paddingHorizontal: 6, paddingVertical: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+  typeCardSelected: { borderColor: '#4055AD' },
+  typeLabel: { fontSize: 13, fontWeight: '500', marginTop: 10, textAlign: 'center', width: '100%', flexShrink: 1 },
+  locationStatus: { fontSize: 14, marginBottom: 20, textAlign: 'center' },
+  createButton: { backgroundColor: '#4055AD', padding: 17, borderRadius: 14, alignItems: 'center' },
   createButtonDisabled: { opacity: 0.5 },
   createButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
