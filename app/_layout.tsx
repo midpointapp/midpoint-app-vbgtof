@@ -74,6 +74,7 @@ export default function RootLayout() {
                   options={{
                     headerShown: true,
                     title: "Meet Now",
+                    headerBackButtonDisplayMode: "minimal",
                   }}
                 />
                 <Stack.Screen
@@ -93,6 +94,7 @@ export default function RootLayout() {
                   options={{
                     headerShown: true,
                     title: "Meet Point Results",
+                    headerBackButtonDisplayMode: "minimal",
                   }}
                 />
                 <Stack.Screen
