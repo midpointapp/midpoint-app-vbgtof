@@ -86,10 +86,11 @@ export type Database = {
           sender_lng: number
           receiver_lat: number | null
           receiver_lng: number | null
-          status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired'
+          status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired' | 'no_places_found'
           invite_token: string
           expires_at: string
           proposed_place_id: string | null
+          proposed_by: 'sender' | 'receiver' | null
           confirmed_place_id: string | null
           created_at: string
           updated_at: string
@@ -105,6 +106,7 @@ export type Database = {
           invite_token?: string
           expires_at?: string
           proposed_place_id?: string | null
+          proposed_by?: 'sender' | 'receiver' | null
           confirmed_place_id?: string | null
           created_at?: string
           updated_at?: string
@@ -120,6 +122,7 @@ export type Database = {
           invite_token?: string
           expires_at?: string
           proposed_place_id?: string | null
+          proposed_by?: 'sender' | 'receiver' | null
           confirmed_place_id?: string | null
           created_at?: string
           updated_at?: string
