@@ -12,11 +12,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
   const expiresAt = new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).toISOString();
 
   console.log('[SessionUtils] ========== CREATING SESSION ==========');
-  console.log('[SessionUtils] Session ID:', sessionId);
-  console.log('[SessionUtils] Invite token:', inviteToken);
-  console.log('[SessionUtils] Join code:', joinCode);
-  console.log('[SessionUtils] Category:', category);
-  console.log('[SessionUtils] Sender location:', { lat: senderLat, lng: senderLng });
+  console.log('[SessionUtils] Creating session for category:', category);
 
   try {
     const { data: sessionData, error: sessionError } = await supabase
@@ -44,7 +40,6 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
     }
 
     console.log('[SessionUtils] ✅ Session created successfully');
-    console.log('[SessionUtils] ✅ Join code to share:', joinCode);
 
     const joinUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(inviteToken)}`;
     const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${joinCode}`;
