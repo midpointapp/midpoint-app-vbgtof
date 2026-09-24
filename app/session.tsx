@@ -45,6 +45,7 @@ interface MeetSession {
   join_code?: string;
   expires_at: string;
   proposed_place_id: string | null;
+  proposed_by?: 'sender' | 'receiver' | null;
   confirmed_place_id: string | null;
   created_at: string;
 }
@@ -334,6 +335,10 @@ export default function SessionScreen() {
 
   const handleProposePlace = async (place: SessionPlace) => {
     if (!session) return;
+    if (session.status === 'proposed' && session.proposed_by === (isSender ? 'sender' : 'receiver')) {
+      Alert.alert('Waiting for response', 'The other person needs to respond before you propose another place.');
+      return;
+    }
     console.log('[Session] Proposing place:', place.name);
 
     try {
@@ -341,6 +346,7 @@ export default function SessionScreen() {
         .from('meet_sessions')
         .update({
           proposed_place_id: place.place_id,
+          proposed_by: isSender ? 'sender' : 'receiver',
           status: 'proposed',
         })
         .eq('id', session.id);
@@ -355,6 +361,10 @@ export default function SessionScreen() {
 
   const handleAgreePlace = async () => {
     if (!session || !session.proposed_place_id) return;
+    if (session.proposed_by === (isSender ? 'sender' : 'receiver')) {
+      Alert.alert('Waiting for response', 'Only the other person can accept this proposal.');
+      return;
+    }
     console.log('[Session] Agreeing to proposed place');
 
     try {
@@ -383,6 +393,7 @@ export default function SessionScreen() {
         .from('meet_sessions')
         .update({
           proposed_place_id: null,
+          proposed_by: null,
           status: 'connected',
         })
         .eq('id', session.id);
@@ -550,12 +561,12 @@ export default function SessionScreen() {
                     </Text>
                   </View>
                   <View style={styles.placeActions}>
-                    {isSender && session.status === 'connected' && (
+                    {(session.status === 'connected' || (session.status === 'proposed' && session.proposed_by !== (isSender ? 'sender' : 'receiver'))) && (
                       <TouchableOpacity
                         style={[styles.proposeButton, { backgroundColor: colors.primary }]}
                         onPress={() => handleProposePlace(place)}
                       >
-                        <Text style={styles.buttonText}>Propose</Text>
+                        <Text style={styles.buttonText}>{session.status === 'proposed' ? 'Counter' : 'Propose'}</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
@@ -582,7 +593,7 @@ export default function SessionScreen() {
                   {proposedPlace.address}
                 </Text>
               </View>
-              {!isSender && (
+              {session.proposed_by !== (isSender ? 'sender' : 'receiver') && (
                 <View style={styles.proposalActions}>
                   <TouchableOpacity
                     style={[styles.agreeButton, { backgroundColor: colors.success }]}
