@@ -202,7 +202,8 @@ export default function SessionScreen() {
           receiver_lng: location.coords.longitude,
           status: 'connected',
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('invite_token', sessionData.invite_token);
 
       if (error) throw error;
       // Sender's realtime subscription will detect receiver_lat and trigger place generation
@@ -296,7 +297,7 @@ export default function SessionScreen() {
   }, [paramsReady, sessionId, token]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !session) return;
 
     const channel = supabase
       .channel(`session:${sessionId}`)
@@ -340,7 +341,7 @@ export default function SessionScreen() {
       channel.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, session?.id]);
 
   const handleProposePlace = async (place: SessionPlace) => {
     if (!session) return;
