@@ -114,11 +114,7 @@ export default function InviteScreen() {
         address: address || undefined,
       });
 
-      console.log('Location obtained:', {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        address,
-      });
+      console.log('Location obtained successfully');
 
       setLocationLoading(false);
     } catch (error) {
@@ -175,7 +171,7 @@ export default function InviteScreen() {
 
       setMidpointCoords({ lat: midLat, lng: midLng });
 
-      console.log('Searching for places near midpoint:', { midLat, midLng, meetupType });
+      console.log('Searching for places near midpoint for type:', meetupType);
 
       // Search for nearby places using Google Places API
       const foundPlaces = await searchNearbyPlaces(midLat, midLng, meetupType);
