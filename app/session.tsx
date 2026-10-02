@@ -42,6 +42,7 @@ interface MeetSession {
   receiver_lng: number | null;
   status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired' | 'no_places_found';
   invite_token: string;
+  sender_token?: string | null;
   join_code?: string;
   expires_at: string;
   proposed_place_id: string | null;
@@ -212,9 +213,7 @@ export default function SessionScreen() {
 
   const loadSession = async (id: string, accessToken: string | null) => {
     try {
-      const senderRole = isSenderParam === 'true';
-      setIsSender(senderRole);
-      isSenderRef.current = senderRole;
+      const requestedSenderRole = isSenderParam === 'true';
       placesGeneratedRef.current = false;
       setLoading(true);
       setError(null);
@@ -239,12 +238,22 @@ export default function SessionScreen() {
         return;
       }
 
-      if (accessToken && data.invite_token !== accessToken) {
+      if (!accessToken) {
+        setError('This session link is missing its access token.');
+        setLoading(false);
+        return;
+      }
+
+      const senderRole = requestedSenderRole && !!data.sender_token && data.sender_token === accessToken;
+      const receiverRole = !requestedSenderRole && data.invite_token === accessToken;
+      if (!senderRole && !receiverRole) {
         setError('Invalid access token. You do not have permission to view this session.');
         setLoading(false);
         return;
       }
 
+      setIsSender(senderRole);
+      isSenderRef.current = senderRole;
       setSession(data);
 
       await loadSessionPlaces(id);
@@ -349,7 +358,8 @@ export default function SessionScreen() {
           proposed_by: isSender ? 'sender' : 'receiver',
           status: 'proposed',
         })
-        .eq('id', session.id);
+        .eq('id', session.id)
+        .eq(isSender ? 'sender_token' : 'invite_token', token || '');
 
       if (error) throw error;
 
@@ -374,7 +384,11 @@ export default function SessionScreen() {
           confirmed_place_id: session.proposed_place_id,
           status: 'confirmed',
         })
-        .eq('id', session.id);
+        .eq('id', session.id)
+        .eq('status', 'proposed')
+        .eq('proposed_place_id', session.proposed_place_id)
+        .eq('proposed_by', isSender ? 'receiver' : 'sender')
+        .eq(isSender ? 'sender_token' : 'invite_token', token || '');
 
       if (error) throw error;
 
@@ -400,7 +414,11 @@ export default function SessionScreen() {
           proposed_by: null,
           status: 'connected',
         })
-        .eq('id', session.id);
+        .eq('id', session.id)
+        .eq('status', 'proposed')
+        .eq('proposed_place_id', session.proposed_place_id || '')
+        .eq('proposed_by', isSender ? 'receiver' : 'sender')
+        .eq(isSender ? 'sender_token' : 'invite_token', token || '');
 
       if (error) throw error;
     } catch {
