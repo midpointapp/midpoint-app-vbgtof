@@ -8,6 +8,7 @@ import { searchNearbyPlaces, Place, calculateDynamicRadius, calculateDistance } 
 export async function createSessionAndSendInvite(category: string, senderLat: number, senderLng: number) {
   const sessionId = generateId();
   const inviteToken = generateId();
+  const senderToken = generateId();
   const joinCode = generateJoinCode();
   const expiresAt = new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).toISOString();
 
@@ -23,6 +24,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
         sender_lat: senderLat,
         sender_lng: senderLng,
         invite_token: inviteToken,
+        sender_token: senderToken,
         join_code: joinCode,
         expires_at: expiresAt,
         status: 'waiting_for_receiver',
@@ -56,7 +58,7 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
       await Share.share({ message });
     }
 
-    return { ...sessionData, join_code: joinCode };
+    return { ...sessionData, join_code: joinCode, sender_token: senderToken };
 
   } catch (error: any) {
     console.error('[SessionUtils] ❌ Error creating session:', error.message);
