@@ -16,10 +16,12 @@ Do not merge this branch into main or deploy until two-device regression testing
 - Rejecting without a counterproposal -> connected. Expired and confirmed are terminal unless a separate explicit new-meeting flow is implemented.
 
 ## Required backend work before enabling counterproposals
-- Store proposal author/role, proposal version or ID, and atomic acceptance guarded by current proposal ID and expected state. Never trust an isSender URL parameter as authorization.
+- Store proposal author/role and use atomic acceptance guarded by current proposal ID, author and expected state. Never trust an isSender URL parameter as authorization.
+- New sessions use separate sender_token and invite_token credentials. Never put sender_token in the receiver invite URL. Before production, replace client-only token checks with server-enforced authorization (RLS + authenticated participant identity, or security-definer RPC/Edge Functions that validate participant credentials).
 - Enforce token/session access, role authorization, expiration and transitions server-side with RLS or authenticated Edge Functions. Avoid exposing coordinates or invite tokens to unauthorized users.
 - Confirm realtime publication and subscriptions; handle missed events by re-fetching on focus/reconnect.
 - Review existing Supabase migrations and take a separately verified database backup before applying schema changes. Never commit secrets or backup data to this public repository.
+- The tracked .env file has been removed from this development branch and ignored going forward, but its historical contents remain in Git history. Audit and rotate any credentials that were ever sensitive before publication; do not paste them into issues, chat, or commits.
 
 ## UI work
 - Hide native stack header where a screen draws its own header; avoid duplicate arrows and '(tabs)' titles.
