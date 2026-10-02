@@ -346,9 +346,6 @@ export default function InviteScreen() {
                   {myLocation.address}
                 </Text>
               )}
-              <Text style={[styles.coordinatesText, { color: colors.textSecondary }]}>
-                {myLocation.latitude.toFixed(4)}, {myLocation.longitude.toFixed(4)}
-              </Text>
             </View>
           ) : locationError ? (
             <View>
