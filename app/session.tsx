@@ -65,7 +65,7 @@ function getCategoryLabel(type: string): string {
 
 const STATUS_LABEL: Record<string, string> = {
   waiting_for_receiver: 'Waiting for other person...',
-  connected: 'Both locations found — finding midpoint...',
+  connected: 'Both locations found — choose a meeting place',
   proposed: 'Place proposed — waiting for response',
   confirmed: 'Meeting confirmed!',
   expired: 'Session expired',
@@ -386,6 +386,10 @@ export default function SessionScreen() {
 
   const handleDenyPlace = async () => {
     if (!session) return;
+    if (session.proposed_by === (isSender ? 'sender' : 'receiver')) {
+      Alert.alert('Waiting for response', 'Only the other person can decline this proposal.');
+      return;
+    }
     console.log('[Session] Denying proposed place');
 
     try {
