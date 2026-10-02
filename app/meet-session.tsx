@@ -133,10 +133,7 @@ export default function MeetSessionScreen() {
 
       // Reverse geocode midpoint if available
       if (data.midpoint_lat && data.midpoint_lng) {
-        console.log('[MeetSession] Reverse geocoding midpoint:', {
-          lat: data.midpoint_lat,
-          lng: data.midpoint_lng,
-        });
+        console.log('[MeetSession] Reverse geocoding midpoint');
         reverseGeocodeMidpoint(data.midpoint_lat, data.midpoint_lng);
       }
 
@@ -167,7 +164,7 @@ export default function MeetSessionScreen() {
           filter: `meet_point_id=eq.${meetPointId}`,
         },
         (payload) => {
-          console.log('[MeetSession] Real-time update received:', payload);
+          console.log('[MeetSession] Real-time update received:', payload.eventType);
           if (payload.new) {
             const updatedMeetPoint = payload.new as MeetPoint;
             setMeetPoint(updatedMeetPoint);
