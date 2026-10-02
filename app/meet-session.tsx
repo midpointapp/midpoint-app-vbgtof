@@ -433,9 +433,6 @@ export default function MeetSessionScreen() {
                     {midpointAddress}
                   </Text>
                 )}
-                <Text style={[styles.mapInfoCoords, { color: colors.textSecondary }]}>
-                  {meetPoint.midpoint_lat.toFixed(4)}, {meetPoint.midpoint_lng.toFixed(4)}
-                </Text>
               </View>
             )}
 
@@ -446,18 +443,12 @@ export default function MeetSessionScreen() {
                 <Text style={[styles.markerLabel, { color: colors.text }]}>
                   {meetPoint.sender_name}
                 </Text>
-                <Text style={[styles.markerCoords, { color: colors.textSecondary }]}>
-                  {meetPoint.sender_lat.toFixed(4)}, {meetPoint.sender_lng.toFixed(4)}
-                </Text>
               </View>
               {meetPoint.receiver_lat && meetPoint.receiver_lng && (
                 <View style={styles.markerItem}>
                   <View style={[styles.markerDot, { backgroundColor: colors.secondary }]} />
                   <Text style={[styles.markerLabel, { color: colors.text }]}>
                     {meetPoint.receiver_name || 'Unknown'}
-                  </Text>
-                  <Text style={[styles.markerCoords, { color: colors.textSecondary }]}>
-                    {meetPoint.receiver_lat.toFixed(4)}, {meetPoint.receiver_lng.toFixed(4)}
                   </Text>
                 </View>
               )}
