@@ -491,7 +491,7 @@ export default function SessionScreen() {
                     onPress={async () => {
                       const inviteUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
                       const message = `Join me on MidPoint Meet!\n\nTap to join: ${inviteUrl}\n\nOr enter code: ${session.join_code}`;
-                      console.log('[Session] Share button pressed, inviteUrl:', inviteUrl);
+                      // Do not log invitation links or access tokens.
                       await Share.share({ message });
                     }}
                   >
@@ -503,7 +503,7 @@ export default function SessionScreen() {
                     onPress={async () => {
                       const inviteUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
                       const message = `Join me on MidPoint Meet!\n\nTap to join: ${inviteUrl}\n\nOr enter code: ${session.join_code}`;
-                      console.log('[Session] Copy invite button pressed, inviteUrl:', inviteUrl);
+                      // Do not log invitation links or access tokens.
                       await Clipboard.setStringAsync(message);
                       Alert.alert('Copied!', 'Invite link copied to clipboard');
                     }}
