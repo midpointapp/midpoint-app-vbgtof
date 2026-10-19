@@ -1,0 +1,25 @@
+name: MidPoint quality checks
+on:
+  pull_request:
+  push:
+    branches: [main, maintenance/launch-readiness]
+  workflow_dispatch:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Static launch configuration tests
+        run: node --test tests/launch-config.test.cjs
+      - name: TypeScript validation
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
