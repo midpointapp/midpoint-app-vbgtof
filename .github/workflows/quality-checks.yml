@@ -16,7 +16,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Static launch configuration tests
-        run: node --test tests/launch-config.test.cjs
+        run: node --test tests/*.test.cjs
       - name: TypeScript validation
         run: npx tsc --noEmit
       - name: Lint
