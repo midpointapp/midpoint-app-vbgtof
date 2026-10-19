@@ -13,10 +13,8 @@ export async function createSessionAndSendInvite(category: string, senderLat: nu
 
   console.log('[SessionUtils] ========== CREATING SESSION ==========');
   console.log('[SessionUtils] Session ID:', sessionId);
-  console.log('[SessionUtils] Invite token:', inviteToken);
   console.log('[SessionUtils] Join code:', joinCode);
   console.log('[SessionUtils] Category:', category);
-  console.log('[SessionUtils] Sender location:', { lat: senderLat, lng: senderLng });
 
   try {
     const { data: sessionData, error: sessionError } = await supabase
