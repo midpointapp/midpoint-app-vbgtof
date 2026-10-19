@@ -65,7 +65,7 @@ export default function ReceiverSessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [locationCaptured, setLocationCaptured] = useState(false);
 
-  console.log('[ReceiverSession] Received id:', id, 'token:', token);
+  // Do not log invitation credentials.
 
   const captureReceiverLocation = useCallback(async (sessionId: string) => {
     console.log('[ReceiverSession] Capturing receiver location for session:', sessionId);
@@ -79,7 +79,6 @@ export default function ReceiverSessionScreen() {
 
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
-      console.log('[ReceiverSession] Got location:', { latitude, longitude });
 
       const { error: updateError } = await supabase
         .from('meet_sessions')
@@ -128,7 +127,6 @@ export default function ReceiverSessionScreen() {
       .eq('id', id)
       .single();
 
-    console.log('[ReceiverSession] Session load result:', { data, error: fetchError });
 
     if (fetchError || !data) {
       console.error('[ReceiverSession] Session not found:', fetchError);
@@ -184,7 +182,6 @@ export default function ReceiverSessionScreen() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'meet_sessions', filter: `id=eq.${id}` },
         (payload) => {
-          console.log('[ReceiverSession] Realtime session update:', payload.new);
           setSession(payload.new as MeetSession);
         }
       )
