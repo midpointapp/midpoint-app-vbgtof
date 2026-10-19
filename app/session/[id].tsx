@@ -16,18 +16,14 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
-import { supabase } from '@/app/integrations/supabase/client';
+import { secureSessionRequest, type SecureSessionResponse } from '@/utils/secureSessionApi';
 
 interface MeetSession {
   id: string;
   type: string;
-  sender_lat: number | null;
-  sender_lng: number | null;
-  receiver_lat: number | null;
-  receiver_lng: number | null;
+  receiver_location_shared?: boolean;
   status: string;
-  invite_token: string;
-  join_code: string;
+  join_code?: string;
   expires_at: string;
   proposed_place_id: string | null;
   confirmed_place_id: string | null;
@@ -64,172 +60,76 @@ export default function ReceiverSessionScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [locationCaptured, setLocationCaptured] = useState(false);
+  const baseUrl = process.env.EXPO_PUBLIC_SECURE_SUPABASE_URL;
+  const callApi = useCallback(async (action: 'get' | 'receiver_location' | 'agree' | 'decline', extra: { lat?: number; lng?: number; placeId?: string } = {}): Promise<SecureSessionResponse> => {
+    if (!baseUrl || !id || !token) throw new Error('Secure meeting service is not configured.');
+    return secureSessionRequest({ action, sessionId: id, token, ...extra }, { baseUrl });
+  }, [baseUrl, id, token]);
+  const applyResponse = useCallback((response: SecureSessionResponse) => {
+    if (response.session) setSession(response.session as unknown as MeetSession);
+    if (response.places) setPlaces(response.places as unknown as SessionPlace[]);
+  }, []);
 
   // Do not log invitation credentials.
 
-  const captureReceiverLocation = useCallback(async (sessionId: string) => {
-    console.log('[ReceiverSession] Capturing receiver location for session:', sessionId);
+  const captureReceiverLocation = useCallback(async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.log('[ReceiverSession] Location permission denied');
         Alert.alert('Location Required', 'Please enable location access so we can find your midpoint.');
         return;
       }
-
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = loc.coords;
+      const response = await callApi('receiver_location', { lat: loc.coords.latitude, lng: loc.coords.longitude });
+      applyResponse(response);
+      setLocationCaptured(true);
+    } catch {
+      Alert.alert('Error', 'Unable to share location. Please try again.');
+    }
+  }, [callApi, applyResponse]);
 
-      const { error: updateError } = await supabase
-        .from('meet_sessions')
-        .update({ receiver_lat: latitude, receiver_lng: longitude, status: 'connected' })
-        .eq('id', sessionId);
-
-      if (updateError) {
-        console.error('[ReceiverSession] Failed to update receiver location:', updateError);
-      } else {
-        console.log('[ReceiverSession] Receiver location saved, status set to connected');
-        setLocationCaptured(true);
+  const loadSession = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const response = await callApi('get');
+      applyResponse(response);
+      setError(null);
+      if (response.session && !(response.session as MeetSession).receiver_location_shared && !locationCaptured) {
+        await captureReceiverLocation();
       }
     } catch (err) {
-      console.error('[ReceiverSession] Error capturing location:', err);
+      if (showLoading) setError(err instanceof Error ? err.message : 'Unable to load meeting');
+    } finally {
+      if (showLoading) setLoading(false);
     }
-  }, []);
-
-  const loadPlaces = useCallback(async (sessionId: string) => {
-    console.log('[ReceiverSession] Loading session_places for session:', sessionId);
-    const { data, error: placesError } = await supabase
-      .from('session_places')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('rank', { ascending: true });
-
-    if (placesError) {
-      console.error('[ReceiverSession] Error loading places:', placesError);
-    } else {
-      console.log('[ReceiverSession] Loaded places:', data?.length ?? 0);
-      setPlaces(data ?? []);
-    }
-  }, []);
-
-  const loadSession = useCallback(async () => {
-    if (!id || !token) {
-      console.log('[ReceiverSession] Missing id or token');
-      setError('Invalid invite link');
-      setLoading(false);
-      return;
-    }
-
-    console.log('[ReceiverSession] Loading session from Supabase, id:', id);
-    const { data, error: fetchError } = await supabase
-      .from('meet_sessions')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-
-    if (fetchError || !data) {
-      console.error('[ReceiverSession] Session not found:', fetchError);
-      setError('Session not found');
-      setLoading(false);
-      return;
-    }
-
-    if (data.invite_token !== token) {
-      console.log('[ReceiverSession] Token mismatch — invalid invite link');
-      setError('Invalid invite link');
-      setLoading(false);
-      return;
-    }
-
-    const now = new Date();
-    const expiresAt = new Date(data.expires_at);
-    if (expiresAt < now) {
-      console.log('[ReceiverSession] Session expired at:', data.expires_at);
-      setError('This invite has expired');
-      setLoading(false);
-      return;
-    }
-
-    setSession(data);
-    setLoading(false);
-
-    await loadPlaces(id);
-
-    if (data.receiver_lat === null) {
-      console.log('[ReceiverSession] No receiver location yet — capturing GPS');
-      await captureReceiverLocation(id);
-    } else {
-      console.log('[ReceiverSession] Receiver location already set');
-      setLocationCaptured(true);
-    }
-  }, [id, token, loadPlaces, captureReceiverLocation]);
+  }, [callApi, applyResponse, captureReceiverLocation, locationCaptured]);
 
   useEffect(() => {
-    setTimeout(() => loadSession(), 0);
+    void loadSession(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, token, baseUrl]);
+
+  // Server-side authorization replaces unprotected Postgres changefeed subscriptions.
+  // Poll only while the screen is mounted; do not expose meeting rows over Realtime.
+  useEffect(() => {
+    const interval = setInterval(() => { void loadSession(false); }, 5000);
+    return () => clearInterval(interval);
   }, [loadSession]);
 
-  // Realtime subscription for session updates
-  useEffect(() => {
-    if (!id) return;
-
-    console.log('[ReceiverSession] Subscribing to realtime for session:', id);
-
-    const sessionChannel = supabase
-      .channel(`receiver-session-${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'meet_sessions', filter: `id=eq.${id}` },
-        (payload) => {
-          setSession(payload.new as MeetSession);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'session_places', filter: `session_id=eq.${id}` },
-        (payload) => {
-          console.log('[ReceiverSession] Realtime places update:', payload.new);
-          loadPlaces(id);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      console.log('[ReceiverSession] Unsubscribing realtime channel');
-      supabase.removeChannel(sessionChannel);
-    };
-  }, [id, loadPlaces]);
-
   const handleAgree = async (placeId: string) => {
-    if (!session) return;
-    console.log('[ReceiverSession] Agree button pressed, placeId:', placeId);
-    const { error: updateError } = await supabase
-      .from('meet_sessions')
-      .update({ confirmed_place_id: placeId, status: 'confirmed' })
-      .eq('id', session.id);
-
-    if (updateError) {
-      console.error('[ReceiverSession] Error confirming place:', updateError);
+    try {
+      applyResponse(await callApi('agree', { placeId }));
+    } catch {
       Alert.alert('Error', 'Could not confirm the meeting place. Please try again.');
-    } else {
-      console.log('[ReceiverSession] Place confirmed:', placeId);
     }
   };
 
   const handleDeny = async () => {
-    if (!session) return;
-    console.log('[ReceiverSession] Deny button pressed for session:', session.id);
-    const { error: updateError } = await supabase
-      .from('meet_sessions')
-      .update({ proposed_place_id: null, status: 'connected' })
-      .eq('id', session.id);
-
-    if (updateError) {
-      console.error('[ReceiverSession] Error denying place:', updateError);
-      Alert.alert('Error', 'Could not deny the place. Please try again.');
-    } else {
-      console.log('[ReceiverSession] Place denied, status reset to connected');
+    if (!session?.proposed_place_id) return;
+    try {
+      applyResponse(await callApi('decline', { placeId: session.proposed_place_id }));
+    } catch {
+      Alert.alert('Error', 'Could not decline the place. Please try again.');
     }
   };
 
@@ -247,11 +147,11 @@ export default function ReceiverSessionScreen() {
   const categoryLabel = session ? (CATEGORY_LABELS[session.type] ?? session.type) : '';
 
   const proposedPlace = session?.proposed_place_id
-    ? places.find((p) => p.id === session.proposed_place_id) ?? null
+    ? places.find((p) => p.place_id === session.proposed_place_id) ?? null
     : null;
 
   const confirmedPlace = session?.confirmed_place_id
-    ? places.find((p) => p.id === session.confirmed_place_id) ?? null
+    ? places.find((p) => p.place_id === session.confirmed_place_id) ?? null
     : null;
 
   const isWaiting =
@@ -369,7 +269,7 @@ export default function ReceiverSessionScreen() {
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.agreeButton, { backgroundColor: colors.success }]}
-                onPress={() => handleAgree(proposedPlace.id)}
+                onPress={() => handleAgree(proposedPlace.place_id)}
               >
                 <MaterialIcons name="check" size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>Agree</Text>
