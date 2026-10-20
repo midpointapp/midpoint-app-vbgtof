@@ -94,7 +94,7 @@ export default function ReceiverSessionScreen() {
       const response = await callApi('get');
       applyResponse(response);
       setError(null);
-      if (response.session && !(response.session as MeetSession).receiver_location_shared && !locationCaptured) {
+      if (response.session && !(response.session as unknown as MeetSession).receiver_location_shared && !locationCaptured) {
         await captureReceiverLocation();
       }
     } catch (err) {
