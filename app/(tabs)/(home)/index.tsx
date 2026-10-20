@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '@/styles/commonStyles';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '@/app/integrations/supabase/client';
+import { secureSessionRequest } from '@/utils/secureSessionApi';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -26,42 +26,19 @@ export default function HomeScreen() {
 
   const handleJoinSession = async () => {
     const code = joinCode.trim().toUpperCase();
-    console.log('[Home] Join a Meet button pressed, code:', code);
-
-    if (code.length !== 6) {
-      Alert.alert('Invalid Code', 'Please enter a 6-character join code.');
+    if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) {
+      Alert.alert('Invalid Code', 'Please enter a valid six-character join code.');
       return;
     }
-
     setJoining(true);
-    console.log('[Home] Looking up session by join code:', code);
-
     try {
-      const { data, error } = await supabase
-        .from('meet_sessions')
-        .select('*')
-        .eq('join_code', code)
-        .single();
-
-      if (error || !data) {
-        console.log('[Home] Join code not found:', code, error?.message);
-        Alert.alert('Code Not Found', 'Check the code and try again.');
-        return;
-      }
-
-      console.log('[Home] Session found for join code:', code, 'session id:', data.id);
-
-      if (new Date(data.expires_at) < new Date()) {
-        console.log('[Home] Session expired:', data.expires_at);
-        Alert.alert('Session Expired', 'This session has expired.');
-        return;
-      }
-
-      console.log('[Home] Navigating to session as receiver, id:', data.id);
-      router.push(`/session?sessionId=${data.id}&token=${data.invite_token}`);
-    } catch (err: any) {
-      console.error('[Home] Error looking up join code:', err.message);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      const baseUrl = process.env.EXPO_PUBLIC_SECURE_SUPABASE_URL;
+      if (!baseUrl) throw new Error('Secure meeting service is not configured.');
+      const result = await secureSessionRequest({ action: 'redeem', code }, { baseUrl });
+      if (!result.sessionId || !result.token) throw new Error('The code could not be redeemed.');
+      router.push({ pathname: '/session/[id]', params: { id: result.sessionId, token: result.token } });
+    } catch {
+      Alert.alert('Code Not Found', 'This code is invalid or expired. Check the code and try again.');
     } finally {
       setJoining(false);
     }
@@ -119,7 +96,6 @@ export default function HomeScreen() {
             style={[styles.codeInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
             value={joinCodeDisplay}
             onChangeText={(text) => {
-              console.log('[Home] Join code input changed:', text.toUpperCase());
               setJoinCode(text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6));
             }}
             placeholder="A1B2C3"
