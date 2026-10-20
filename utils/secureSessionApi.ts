@@ -1,6 +1,6 @@
 /**
- * Protocol-v2 session API adapter. Not wired into screens yet.
- * Use only after the two-device staging flow is verified.
+ * Protocol-v2 session API adapter used by the staging meeting screens.
+ * Production release requires two-device verification and hardened database policies.
  * Never log credentials, precise locations, or complete responses.
  */
 export type MeetingCategory = 'coffee' | 'food' | 'marketplace' | 'gas' | 'park' | 'police';
