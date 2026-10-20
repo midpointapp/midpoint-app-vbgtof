@@ -149,7 +149,7 @@ export default function MeetSessionScreen() {
   }, [meetPointId]);
 
   const subscribeToMeetPoint = useCallback(() => {
-    if (channelRef.current?.state === 'subscribed') {
+    if (channelRef.current?.state === 'joined') {
       console.log('[MeetSession] Already subscribed to MeetPoint updates');
       return;
     }

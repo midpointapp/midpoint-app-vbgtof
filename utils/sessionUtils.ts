@@ -1,72 +1,31 @@
 
 import { Alert, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { generateId, generateJoinCode } from './idGenerator';
+import { secureSessionRequest, type MeetingCategory } from './secureSessionApi';
 import { supabase } from '../app/integrations/supabase/client';
 import { searchNearbyPlaces, Place, calculateDynamicRadius, calculateDistance } from './locationUtils';
 
 export async function createSessionAndSendInvite(category: string, senderLat: number, senderLng: number) {
-  const sessionId = generateId();
-  const inviteToken = generateId();
-  const joinCode = generateJoinCode();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 24 * 7 * 1000).toISOString();
-
-  console.log('[SessionUtils] ========== CREATING SESSION ==========');
-  console.log('[SessionUtils] Session ID:', sessionId);
-  console.log('[SessionUtils] Invite token:', inviteToken);
-  console.log('[SessionUtils] Join code:', joinCode);
-  console.log('[SessionUtils] Category:', category);
-  console.log('[SessionUtils] Sender location:', { lat: senderLat, lng: senderLng });
-
-  try {
-    const { data: sessionData, error: sessionError } = await supabase
-      .from('meet_sessions')
-      .insert([{
-        id: sessionId,
-        type: category,
-        sender_lat: senderLat,
-        sender_lng: senderLng,
-        invite_token: inviteToken,
-        join_code: joinCode,
-        expires_at: expiresAt,
-        status: 'waiting_for_receiver',
-      }])
-      .select('*')
-      .single();
-
-    if (sessionError) {
-      console.error('[SessionUtils] ❌ Failed to create session:', JSON.stringify(sessionError, null, 2));
-      throw new Error(sessionError.message);
-    }
-
-    if (!sessionData) {
-      throw new Error('Session data is missing');
-    }
-
-    console.log('[SessionUtils] ✅ Session created successfully');
-    console.log('[SessionUtils] ✅ Join code to share:', joinCode);
-
-    const joinUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(inviteToken)}`;
-    const message = `I want to meet you halfway! 📍\n\nOpen this link to find our midpoint:\n${joinUrl}\n\nOr enter code in MidPoint Meet: ${joinCode}`;
-
-    const _urlObj = new URL(joinUrl);
-    console.log('[SessionUtils] ✅ BUNDLE_V2 invite origin+path:', _urlObj.origin + _urlObj.pathname);
-
-    if (Platform.OS === 'web') {
-      console.log('[SessionUtils] Web: copying invite message to clipboard');
-      await Clipboard.setStringAsync(message);
-      Alert.alert('Copied!', `Invite link copied to clipboard.\n\nCode: ${joinCode}`);
-    } else {
-      console.log('[SessionUtils] Native: sharing join code via Share sheet');
-      await Share.share({ message });
-    }
-
-    return { ...sessionData, join_code: joinCode };
-
-  } catch (error: any) {
-    console.error('[SessionUtils] ❌ Error creating session:', error.message);
-    throw error;
+  const baseUrl = process.env.EXPO_PUBLIC_SECURE_SUPABASE_URL;
+  if (!baseUrl) throw new Error('Secure meeting service is not configured.');
+  const response = await secureSessionRequest(
+    { action: 'create', type: category as MeetingCategory, lat: senderLat, lng: senderLng },
+    { baseUrl }
+  );
+  const session = response.session as { id: string; invite_token?: string; join_code?: string } | undefined;
+  if (!session?.id || !session.invite_token || !response.senderToken || !session.join_code) {
+    throw new Error('The meeting service returned an incomplete invitation.');
   }
+  const joinUrl = `https://golden-biscochitos-cff794.netlify.app/?sessionId=${encodeURIComponent(session.id)}&token=${encodeURIComponent(session.invite_token)}`;
+  const message = `I want to meet you halfway! 📍\\n\\nOpen this link to find our midpoint:\\n${joinUrl}\\n\\nOr enter code in MidPoint Meet: ${session.join_code}`;
+  if (Platform.OS === 'web') {
+    await Clipboard.setStringAsync(message);
+    Alert.alert('Copied!', 'Invite copied to clipboard.');
+  } else {
+    await Share.share({ message });
+  }
+  // Never put the sender token in a shared invitation or diagnostic log.
+  return { ...session, sender_token: response.senderToken };
 }
 
 /**

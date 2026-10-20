@@ -12,7 +12,7 @@ const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? FAL
 console.log('[Supabase] EXPO_PUBLIC_SUPABASE_URL present:', !!process.env.EXPO_PUBLIC_SUPABASE_URL);
 console.log('[Supabase] URL first 25 chars:', supabaseUrl.slice(0, 25));
 console.log('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY present:', !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-console.log('[Supabase] Key prefix (first 20 chars):', supabaseAnonKey.slice(0, 20));
+// Never log API key material, including prefixes.
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

@@ -144,7 +144,7 @@ export default function MidpointResultsScreen() {
 
   const subscribeToMeetPoint = useCallback(() => {
     // Check if already subscribed
-    if (channelRef.current?.state === 'subscribed') {
+    if (channelRef.current?.state === 'joined') {
       console.log('Already subscribed to MeetPoint channel');
       return;
     }
