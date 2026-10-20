@@ -61,7 +61,7 @@ export default function MeetNowScreen() {
         location.coords.longitude
       );
       console.log('[MeetNow] Session created, navigating to session screen');
-      router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.invite_token}&isSender=true`);
+      router.push(`/session?sessionId=${sessionData.id}&token=${sessionData.sender_token}&isSender=true`);
     } catch (error: any) {
       Alert.alert('Session Error', error?.message ?? 'Unable to create session');
     } finally {
