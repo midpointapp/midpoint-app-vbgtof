@@ -15,10 +15,8 @@ import * as Location from 'expo-location';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useThemeColors } from '@/styles/commonStyles';
 import { Share } from 'react-native';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { supabase } from '@/app/integrations/supabase/client';
-import { generateMidpointPlaces } from '@/utils/sessionUtils';
+import { secureSessionRequest, type SecureSessionResponse } from '@/utils/secureSessionApi';
 import * as Clipboard from 'expo-clipboard';
 import React, { useState, useEffect, useRef } from 'react';
 
@@ -36,10 +34,7 @@ interface SessionPlace {
 interface MeetSession {
   id: string;
   type: string;
-  sender_lat: number;
-  sender_lng: number;
-  receiver_lat: number | null;
-  receiver_lng: number | null;
+  receiver_location_shared?: boolean;
   status: 'waiting_for_receiver' | 'connected' | 'proposed' | 'confirmed' | 'expired' | 'no_places_found';
   invite_token: string;
   join_code?: string;
@@ -79,11 +74,9 @@ export default function SessionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const colors = useThemeColors();
-  const subscriptionRef = useRef<RealtimeChannel | null>(null);
 
   const sessionId = Array.isArray(params.sessionId) ? params.sessionId[0] : params.sessionId;
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
-  const isSenderParam = Array.isArray(params.isSender) ? params.isSender[0] : params.isSender;
 
   const [session, setSession] = useState<MeetSession | null>(null);
   const [places, setPlaces] = useState<SessionPlace[]>([]);
@@ -91,8 +84,6 @@ export default function SessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSender, setIsSender] = useState(false);
   const [paramsReady, setParamsReady] = useState(false);
-  const placesGeneratedRef = useRef(false);
-  const isSenderRef = useRef(false);
 
   useEffect(() => {
     // expo-router may render before params are populated on cold launch from a deep link.
@@ -105,289 +96,68 @@ export default function SessionScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSessionPlaces = async (id: string) => {
+  const baseUrl = process.env.EXPO_PUBLIC_SECURE_SUPABASE_URL;
+  const applyResponse = (response: SecureSessionResponse) => {
+    if (response.session) setSession(response.session as unknown as MeetSession);
+    if (response.places) setPlaces(response.places as unknown as SessionPlace[]);
+  };
+  const request = async (action: 'get' | 'find_places' | 'propose' | 'agree' | 'decline', placeId?: string) => {
+    if (!baseUrl || !sessionId || !token) throw new Error('Secure meeting credentials are missing.');
+    return secureSessionRequest({ action, sessionId, token, ...(placeId ? { placeId } : {}) }, { baseUrl });
+  };
+  const loadSession = async (initial = false) => {
+    if (initial) { setLoading(true); setError(null); }
     try {
-      const { data, error } = await supabase
-        .from('session_places')
-        .select('*')
-        .eq('session_id', id)
-        .order('rank', { ascending: true });
-
-      if (error) return;
-
-      setPlaces(data || []);
-    } catch {
-      // silently ignore
+      const response = await request('get');
+      setIsSender(response.role === 'sender');
+      applyResponse(response);
+      if (response.role === 'sender' && (response.session as MeetSession | undefined)?.receiver_location_shared && !response.places?.length) {
+        applyResponse(await request('find_places'));
+      }
+    } catch (err) {
+      if (initial) setError(err instanceof Error ? err.message : 'Unable to load meeting.');
+    } finally {
+      if (initial) setLoading(false);
     }
   };
-
-  const generatePlaces = async (id: string, sessionData: MeetSession) => {
-    if (!sessionData.sender_lat || !sessionData.receiver_lat) return;
-    if (
-      typeof sessionData.sender_lat !== 'number' ||
-      typeof sessionData.sender_lng !== 'number' ||
-      typeof sessionData.receiver_lat !== 'number' ||
-      typeof sessionData.receiver_lng !== 'number'
-    ) return;
-    if (
-      isNaN(sessionData.sender_lat) || isNaN(sessionData.sender_lng) ||
-      isNaN(sessionData.receiver_lat) || isNaN(sessionData.receiver_lng)
-    ) return;
-
-    try {
-      const generatedPlaces = await generateMidpointPlaces(
-        sessionData.sender_lat,
-        sessionData.sender_lng,
-        sessionData.receiver_lat,
-        sessionData.receiver_lng,
-        sessionData.type
-      );
-
-      if (generatedPlaces.length === 0) {
-        await supabase
-          .from('meet_sessions')
-          .update({ status: 'no_places_found' })
-          .eq('id', id);
-        return;
-      }
-
-      const placesToInsert = generatedPlaces.slice(0, 3).map((place, index) => ({
-        session_id: id,
-        place_id: place.placeId || `place_${index}`,
-        name: place.name,
-        address: place.address || '',
-        lat: place.latitude,
-        lng: place.longitude,
-        rank: index + 1,
-      }));
-
-      const { error } = await supabase
-        .from('session_places')
-        .insert(placesToInsert);
-
-      if (error) throw error;
-
-      placesGeneratedRef.current = true;
-
-      await loadSessionPlaces(id);
-    } catch {
-      placesGeneratedRef.current = false;
-    }
-  };
-
-  const captureReceiverLocation = async (id: string, sessionData: MeetSession) => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-
-      if (status !== 'granted') {
-        Alert.alert(
-          'Location Required',
-          'Please enable location access in Settings so we can find your midpoint.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
-
-      const { error } = await supabase
-        .from('meet_sessions')
-        .update({
-          receiver_lat: location.coords.latitude,
-          receiver_lng: location.coords.longitude,
-          status: 'connected',
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-      // Sender's realtime subscription will detect receiver_lat and trigger place generation
-    } catch {
-      Alert.alert('Error', 'Failed to capture location');
-    }
-  };
-
-  const loadSession = async (id: string, accessToken: string | null) => {
-    try {
-      const senderRole = isSenderParam === 'true';
-      setIsSender(senderRole);
-      isSenderRef.current = senderRole;
-      placesGeneratedRef.current = false;
-      setLoading(true);
-      setError(null);
-
-      const { data, error: fetchError } = await supabase
-        .from('meet_sessions')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) {
-        throw new Error(fetchError.message);
-      }
-
-      if (!data) {
-        throw new Error('Session not found');
-      }
-
-      if (new Date(data.expires_at) < new Date()) {
-        setError('This session has expired. Please create a new meeting session.');
-        setLoading(false);
-        return;
-      }
-
-      if (accessToken && data.invite_token !== accessToken) {
-        setError('Invalid access token. You do not have permission to view this session.');
-        setLoading(false);
-        return;
-      }
-
-      setSession(data);
-
-      await loadSessionPlaces(id);
-
-      // Only generate if sender, both coords exist, AND no places loaded yet
-      const { data: existingPlaces } = await supabase
-        .from('session_places')
-        .select('id')
-        .eq('session_id', id)
-        .limit(1);
-
-      if (senderRole && data.sender_lat && data.receiver_lat && (!existingPlaces || existingPlaces.length === 0)) {
-        await generatePlaces(id, data);
-      }
-
-      setLoading(false);
-
-      if (!senderRole && !data.receiver_lat) {
-        setTimeout(() => captureReceiverLocation(id, data), 500);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load session. Please check your connection and try again.');
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (!paramsReady) return;
-    if (!sessionId) {
-      console.log('[Session] No sessionId after params settled — showing error');
-      setTimeout(() => {
-        setError('Invalid session link. The URL is missing the session ID. Please check the link and try again.');
-        setLoading(false);
-      }, 0);
+    if (!sessionId || !token) {
+      setError('Invalid meeting link. Missing credentials.');
+      setLoading(false);
       return;
     }
-    console.log('[Session] Loading session:', sessionId);
-    setTimeout(() => loadSession(sessionId, token || null), 0);
+    void loadSession(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsReady, sessionId, token]);
+  }, [paramsReady, sessionId, token, baseUrl]);
 
   useEffect(() => {
-    if (!sessionId) return;
-
-    const channel = supabase
-      .channel(`session:${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'meet_sessions',
-          filter: `id=eq.${sessionId}`,
-        },
-        (payload) => {
-          console.log('[Session] Realtime update received:', payload.eventType);
-          if (payload.new) {
-            const updatedSession = payload.new as MeetSession;
-            setSession(updatedSession);
-
-            if (updatedSession.receiver_lat && updatedSession.sender_lat && !placesGeneratedRef.current && isSenderRef.current) {
-              generatePlaces(sessionId!, updatedSession);
-            }
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_places',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        async () => {
-          await loadSessionPlaces(sessionId);
-        }
-      )
-      .subscribe();
-
-    subscriptionRef.current = channel;
-
-    return () => {
-      channel.unsubscribe();
-    };
+    if (!paramsReady || !sessionId || !token) return;
+    const interval = setInterval(() => { void loadSession(); }, 5000);
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [paramsReady, sessionId, token, baseUrl]);
 
   const handleProposePlace = async (place: SessionPlace) => {
-    if (!session) return;
-    console.log('[Session] Proposing place:', place.name);
-
     try {
-      const { error } = await supabase
-        .from('meet_sessions')
-        .update({
-          proposed_place_id: place.place_id,
-          status: 'proposed',
-        })
-        .eq('id', session.id);
-
-      if (error) throw error;
-
+      applyResponse(await request('propose', place.place_id));
       Alert.alert('Success', `Proposed: ${place.name}`);
     } catch {
       Alert.alert('Error', 'Failed to propose place');
     }
   };
-
   const handleAgreePlace = async () => {
-    if (!session || !session.proposed_place_id) return;
-    console.log('[Session] Agreeing to proposed place');
-
+    if (!session?.proposed_place_id) return;
     try {
-      const { error } = await supabase
-        .from('meet_sessions')
-        .update({
-          confirmed_place_id: session.proposed_place_id,
-          status: 'confirmed',
-        })
-        .eq('id', session.id);
-
-      if (error) throw error;
-
-      Alert.alert('Confirmed!', 'Meeting place confirmed');
+      applyResponse(await request('agree', session.proposed_place_id));
     } catch {
       Alert.alert('Error', 'Failed to confirm place');
     }
   };
-
   const handleDenyPlace = async () => {
-    if (!session) return;
-    console.log('[Session] Denying proposed place');
-
+    if (!session?.proposed_place_id) return;
     try {
-      const { error } = await supabase
-        .from('meet_sessions')
-        .update({
-          proposed_place_id: null,
-          status: 'connected',
-        })
-        .eq('id', session.id);
-
-      if (error) throw error;
+      applyResponse(await request('decline', session.proposed_place_id));
     } catch {
       Alert.alert('Error', 'Failed to deny proposal');
     }
